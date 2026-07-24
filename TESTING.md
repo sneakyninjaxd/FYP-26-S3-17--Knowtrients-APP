@@ -23,10 +23,7 @@ npm install
 
 === 4. SET UP YOUR ENVIRONMENT FILE ===
 
-Mac/Linux: cp .env.example .env
-Windows PowerShell: copy .env.example .env
-
-Open the new .env file and make sure it has:
+Open the .env file and make sure it has:
 EXPO_PUBLIC_API_URL=https://knowtrients-backend-database.onrender.com
 
 This points your app at the shared live backend. You don't need to run anything locally for the API or database.
