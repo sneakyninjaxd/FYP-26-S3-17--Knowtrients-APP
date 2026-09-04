@@ -1,9 +1,11 @@
-import {SafeAreaView,Pressable,ScrollView,View,Text,TextInput,TouchableOpacity,StyleSheet,
-} from 'react-native';
-import { useState } from 'react';
 import { router } from 'expo-router';
-import {  useSafeAreaInsets } from 'react-native-safe-area-context';
-import {DateTimePicker } from '@react-native-community/datetimepicker';
+import {
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View
+} from 'react-native';
 
 export default function ProfileScreen() {
   return (

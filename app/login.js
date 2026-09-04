@@ -1,5 +1,5 @@
-import {View,Text,TextInput,TouchableOpacity,StyleSheet,} from 'react-native';
 import { router } from 'expo-router';
+import { StyleSheet, Text, TextInput, TouchableOpacity, View, } from 'react-native';
 
 export default function Login() {
   return (
@@ -41,7 +41,7 @@ export default function Login() {
         />
 
         <TouchableOpacity style={styles.button}
-        onPress={() => router.push('/Profile/profile(you)')}>
+        onPress={() => router.push('/Profile/you')}>
           <Text style={styles.buttonText}>
             Login
           </Text>
