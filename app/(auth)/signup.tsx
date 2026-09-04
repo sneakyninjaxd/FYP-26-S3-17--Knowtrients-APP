@@ -1,18 +1,18 @@
+import { brand } from '@/constants/brand';
+import { ApiError, useAuth } from '@/contexts/auth-context';
+import { Link, router } from 'expo-router';
 import { useState } from 'react';
 import {
-  View,
-  Text,
-  TextInput,
-  Pressable,
-  StyleSheet,
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from 'react-native';
-import { Link, router } from 'expo-router';
-import { useAuth, ApiError } from '@/contexts/auth-context';
-import { brand } from '@/constants/brand';
 
 export default function SignupScreen() {
   const { signUp } = useAuth();
