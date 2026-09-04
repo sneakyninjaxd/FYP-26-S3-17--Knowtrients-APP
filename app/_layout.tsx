@@ -41,14 +41,14 @@ function RootNavigator() {
       {/* Stack.Protected keeps unauthenticated users out of (tabs), and
           redirects logged-in users away from (auth), without manual
           imperative navigation calls scattered around the app. */}
-      <Stack.Protected guard={true}>
+      <Stack.Protected guard={!!user}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen
           name="modal"
           options={{ presentation: "modal", title: "Modal" }}
         />
       </Stack.Protected>
-      <Stack.Protected guard={false}>
+      <Stack.Protected guard={!user}>
         <Stack.Screen name="(auth)" />
       </Stack.Protected>
     </Stack>
