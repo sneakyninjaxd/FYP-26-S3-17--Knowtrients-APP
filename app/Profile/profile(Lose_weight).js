@@ -1,12 +1,8 @@
-import { router } from 'expo-router';
-import { useState } from 'react';
-import {
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text, TextInput, TouchableOpacity,
-  View
+import {SafeAreaView,Pressable,ScrollView,View,Text,TextInput,TouchableOpacity,StyleSheet,
 } from 'react-native';
+import { useState } from 'react';
+import { router } from 'expo-router';
+import {  useSafeAreaInsets } from 'react-native-safe-area-context';
 
   export default function ProfileScreen() {
     const [currentWeight, setCurrentWeight] = useState('');
@@ -150,14 +146,14 @@ import {
                         {/* Back */}
                             <View style = {styles.row}>
                               <TouchableOpacity style={styles.continueButton}
-                              onPress={() => router.push('/Profile/goal')}>
+                              onPress={() => router.push('/Profile/profile(your_goal)')}>
                               <Text style={styles.continueText}>
                                 ←Back
                               </Text>
                             {/* CONTINUE */}
                             </TouchableOpacity>
                               <TouchableOpacity style={styles.continueButton}
-                              onPress={() => router.push('/Profile/lifestyle')}>
+                              onPress={() => router.push('/Profile/profile(lifestyle)')}>
                               <Text style={styles.continueText}>
                                 Continue →
                               </Text>

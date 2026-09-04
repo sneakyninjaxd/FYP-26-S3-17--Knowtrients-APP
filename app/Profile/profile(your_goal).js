@@ -1,29 +1,22 @@
-import { router } from 'expo-router';
-import { useState } from 'react';
-import {
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text, TextInput, TouchableOpacity,
-  View
+import {SafeAreaView,Pressable,ScrollView,View,Text,TextInput,TouchableOpacity,StyleSheet,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useState } from 'react';
+import { router } from 'expo-router';
+import {  useSafeAreaInsets } from 'react-native-safe-area-context';
 const CONDITIONS = [
-  'No Preference',
-  'Halal',
-  'Vegan',
-  'Vegetarian',
-  'Gluten Free',
-  'Dairy Free',
-  'Low Crab',
-  'High Protein',
-  'Seafood allergy',
+  'Lose Weight',
+  'Gain Weight',
+  'Maintain Weight',
+  'Build Muscle',
+  'Improve Overall Health',
+  'Better Lifestyle',
+  'Eat More Balanced Meals',
+  'Better Sleep Schedule',
   'Other',
 ];
 
   export default function ProfileScreen() {
-  const insets = useSafeAreaInsets();
-  const [activityLevel, setActivityLevel] = useState('');
+
   const [gender, setGender] = useState('');
   const [conditions, setConditions] = useState([]);
   const [otherCondition, setOtherCondition] = useState('');
@@ -41,7 +34,7 @@ const CONDITIONS = [
 
         <SafeAreaView style={styles.container}>
         
-              <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}>
+              <ScrollView>
                 {/* Logo */}
                 <View
                   style={[
@@ -76,133 +69,35 @@ const CONDITIONS = [
                   </View>
         
                   <View style={styles.step}>
-                    <Text style={styles.inactiveStep}>
+                    <Text style={styles.activeStep}>
                       Step 2: Your Goals
                     </Text>
         
-                    <View style={styles.inactiveLine} />
+                    <View style={styles.activeLine} />
                   </View>
         
                   <View style={styles.step}>
-                    <Text style={styles.activeStep}>
+                    <Text style={styles.inactiveStep}>
                       Step 3: Your Lifestyle
                     </Text>
-                    <View style={styles.activeLine} />
+                    <View style={styles.inactiveLine} />
                   </View>
                 </View>
                         <Text style={styles.title}>
-                          Let us know about your Lifestyle
+                          Tell us about your 
+                          Health Goals
                         </Text>
                         <Text style={styles.description}>
-                          Let Knowtrients understand you better to give you recommendations that fits your lifestyle
+                          Let us know what you would like to achieve so that we can guide you better
                         </Text>
-                                {/* Activity levels*/}
+                                {/* Goals*/}
                                 <Text style={styles.label}>
-                                  Activity Level
+                                  What is your Primary Goal?
                                 </Text>
                                   <Text style = {styles.description}>
-                                    How active are you? Select one.
+                                    Select all that apply.This allows Knowtrients give recommendations according to your goals.
                                   </Text>
-
-                                  <View style={styles.activityContainer}>
-
-                                    {/* Sedentary */}
-                                            <TouchableOpacity
-                                                style={
-                                                        activityLevel === 'Sedentary'
-                                                        ? styles.selectedActivity
-                                                        : styles.activityButton
-                                                        }
-                                                        onPress={() => setActivityLevel('Sedentary')}
-                                                        >
-                                                    <Text style={styles.activityTitle}>
-                                                        Sedentary
-                                                    </Text>
-
-                                                    <Text style={styles.activityDescription}>
-                                                        Mostly sitting
-                                                    </Text>
-                                            </TouchableOpacity>
-
-
-                                    {/* Lightly Active */}
-                                            <TouchableOpacity
-                                                style={
-                                                        activityLevel === 'Lightly Active'
-                                                        ? styles.selectedActivity
-                                                        : styles.activityButton
-                                                        }
-                                                        onPress={() => setActivityLevel('Lightly Active')}
-                                                        >
-                                                    <Text style={styles.activityTitle}>
-                                                        Lightly Active
-                                                    </Text>
-
-                                                    <Text style={styles.activityDescription}>
-                                                            Exercise a few times per month
-                                                    </Text>
-                                            </TouchableOpacity>
-
-
-                                    {/* Moderately Active */}
-                                            <TouchableOpacity
-                                                style={
-                                                        activityLevel === 'Moderately Active'
-                                                        ? styles.selectedActivity
-                                                        : styles.activityButton
-                                                        }
-                                                        onPress={() => setActivityLevel('Moderately Active')}
-                                                        >
-                                                    <Text style={styles.activityTitle}>
-                                                        Moderately Active
-                                                    </Text>
-
-                                                    <Text style={styles.activityDescription}>
-                                                        Exercise 1-2 days / week
-                                                    </Text>
-                                            </TouchableOpacity>
-
-
-                                    {/* Very Active */}
-                                            <TouchableOpacity
-                                                style={
-                                                        activityLevel === 'Very Active'
-                                                        ? styles.selectedActivity
-                                                        : styles.activityButton
-                                                        }
-                                                        onPress={() => setActivityLevel('Very Active')}
-                                                        >
-                                                    <Text style={styles.activityTitle}>
-                                                        Very Active
-                                                    </Text>
-
-                                                    <Text style={styles.activityDescription}>
-                                                        Exercise almost daily
-                                                    </Text>
-                                            </TouchableOpacity>
-
-
-                                    {/* Athlete */}
-                                            <TouchableOpacity
-                                                style={
-                                                        activityLevel === 'Athlete'
-                                                        ? styles.selectedActivity
-                                                        : styles.activityButton
-                                                        }
-                                                        onPress={() => setActivityLevel('Athlete')}
-                                                        >
-                                                    <Text style={styles.activityTitle}>
-                                                        Athlete
-                                                    </Text>
-                                            </TouchableOpacity>
-
-                                </View>
-                                <Text style={styles.label}>
-                                  Dietary Preference
-                                </Text>
-                                  <Text style = {styles.description}>
-                                    Select all that apply.This allows Knowtrients to give recommendations according to your diet
-                                  </Text>                                                                
+                        
                                 <View style={styles.conditionContainer}>
                                   {CONDITIONS.map((item) => {
                                     const selected = conditions.includes(item);
@@ -232,18 +127,42 @@ const CONDITIONS = [
                                     onChangeText={setOtherCondition}
                                     />
                                     )}
+                      {/* Timeline*/}
+                      <Text style={styles.label}>
+                      How fast would you like to achieve these goals?
+                      </Text>
+                    <TouchableOpacity style={styles.countryInput}>
+
+                      <Text style={styles.placeholder}>
+                        Select a TimeLine
+                      </Text>
+
+                    <Text style={styles.arrow}>
+                                ⌄
+                    </Text>
+                    </TouchableOpacity>
 
                             {/* Back */}
                             <View style = {styles.row}>
                               <TouchableOpacity style={styles.continueButton}
-                              onPress={() => router.push('/Profile/you')}>
+                              onPress={() => router.push('/Profile/profile(you)')}>
                               <Text style={styles.continueText}>
                                 ←Back
                               </Text>
                             {/* CONTINUE */}
                             </TouchableOpacity>
                               <TouchableOpacity style={styles.continueButton}
-                                onPress={() => router.push('/Profile/finish')}>
+                              onPress={() => {
+                                if (conditions.includes('Gain Weight')){
+                                  router.push('/Profile/profile(Gain_weight)')
+                                }
+                                else if (conditions.includes('Lose Weight')){
+                                  router.push('/Profile/profile(Lose_weight)')
+                                } else {
+                                  router.push('/Profile/profile(lifestyle)')
+                                }
+                                }}>
+
                               <Text style={styles.continueText}>
                                 Continue →
                               </Text>
@@ -501,45 +420,7 @@ genderText: {
     fontSize: 14,
     fontWeight: '600',
   },
-
-
-  activityContainer: {
-  gap: 8,
-  marginTop: 5,
-},
-
-activityButton: {
-  backgroundColor: '#07140F',
-  borderWidth: 1,
-  borderColor: '#123B2F',
-  borderRadius: 12,
-  minHeight: 35,
-  paddingVertical: 6,
-  paddingHorizontal: 15,
-},
-
-selectedActivity: {
-  backgroundColor: '#07140F',
-  borderWidth: 1,
-  borderColor: '#48DDB0',
-  borderRadius: 12,
-  minHeight: 35,
-  paddingVertical: 6,
-  paddingHorizontal: 15,
-},
-
-activityTitle: {
-  color: '#48DDB0',
-  fontSize: 12,
-  fontWeight: '500',
-},
-
-activityDescription: {
-  color: '#60766E',
-  fontSize: 10,
-  marginTop: 2,
-},
-  container: {
+    container: {
     flex: 1,
     backgroundColor: '#020D09',
   },
