@@ -1,5 +1,5 @@
-import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { Tabs } from 'expo-router';
 
 export default function TabLayout() {
   return (
@@ -50,6 +50,9 @@ export default function TabLayout() {
       <Tabs.Screen name="log/activities" options={{ href: null }} />
       <Tabs.Screen name="log/sleep" options={{ href: null }} />
       <Tabs.Screen name="log/foodintake/food" options={{ href: null }} />
+      <Tabs.Screen name="account/account" options={{ href: null }} />
+      <Tabs.Screen name="account/accountdetails" options={{ href: null }} />
+      <Tabs.Screen name="account/subscription" options={{ href: null }} />
     </Tabs>
   );
 }

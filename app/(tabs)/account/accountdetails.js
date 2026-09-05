@@ -1,12 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import {
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    SafeAreaView,
+    ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View
 } from 'react-native';
 
 export default function ProfileScreen() {
@@ -24,41 +20,82 @@ export default function ProfileScreen() {
         <View style={styles.divider} />
         <View>
             <Text style = {styles.title}>
-                Log
+                Account Details
             </Text>
             <Text style = {styles.description}>
-                What would you like to log?
+                Update your account details & settings 
             </Text>
-    
-        <View style={[styles.step, styles.activityBox]}>
-            <Text
-                  style={styles.activity}
-                  onPress={() => router.push('/log/activities/activities')}
-                  >
-                  My Activities
-            </Text>
-        </View>
-
-        <View style={[styles.step, styles.activityBox]}>
-            <Text
-                  style={styles.activity}
-                  onPress={() => router.push('/log/sleep')}
-                  >
-                  My Sleep
-            </Text>
-        </View>
-
-        <View style={[styles.step, styles.activityBox]}>
-            <Text
-                  style={styles.activity}
-                  onPress={() => router.push('/log/foodintake')}
-                  >
-                  My Food intake
-            </Text>
-        </View>
-
+        <View style={styles.Card}>
+                <Text style={styles.label}>Email</Text>
         
-      </View>
+                <TextInput
+                  style={styles.input}
+                  placeholder="example123@gmail.com"
+                  placeholderTextColor="#bd4d4d"
+                />
+                {/* First Name and Last Name placed in a row with flexbox*/}
+                <View style={styles.row}>
+        
+                  <View style={styles.field}>
+                    <Text style={styles.label}>First Name:</Text>
+        
+                    <TextInput
+                      style={styles.input}
+                      placeholder="John"
+                      placeholderTextColor="#bd4d4d"
+                    />
+                  </View>
+        
+                  <View style={styles.field}>
+                    <Text style={styles.label}>Last Name:</Text>
+        
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Doe"
+                      placeholderTextColor="#bd4d4d"
+                    />
+                  </View>
+        
+                </View>
+                {/* password with secure text*/}
+                <Text style={styles.label}>Current Password:</Text>
+        
+                <TextInput
+                  secureTextEntry
+                  style={styles.input}
+                  placeholder="**************"
+                  placeholderTextColor="#bd4d4d"
+                />
+        
+                <Text style={styles.label}>Change Password:</Text>
+        
+                <TextInput
+                  secureTextEntry
+                  style={styles.input}
+                  placeholder="**************"
+                  placeholderTextColor="#bd4d4d"
+                /> 
+
+                <Text style={styles.label}>Re-type New Password:</Text>
+        
+                <TextInput
+                  secureTextEntry
+                  style={styles.input}
+                  placeholder="**************"
+                  placeholderTextColor="#bd4d4d"
+                /> 
+
+
+
+                      {/* Savge button*/}
+                        <TouchableOpacity style={styles.button}
+                        onPress={() => router.push('/account/account')}>
+                          <Text style={styles.buttonText}>
+                            Save
+                          </Text>
+                        </TouchableOpacity>
+                </View>
+            </View>
     </ScrollView>
     </SafeAreaView>
 
@@ -115,16 +152,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#123B2F',
     borderRadius: 5,
   },
-
-
-title: {
-  color: '#FFFFFF',
-  fontSize: 35,
-  fontFamily: 'serif',
-  marginBottom: 5,
-  paddingLeft: 25,
-  paddingTop: 10,
-},
 
   description: {
     color: '#3AA889',
@@ -319,7 +346,7 @@ genderText: {
 
   divider: {
   backgroundColor: '#123B2F',
-  height: '1%',
+  height: '0.1%',
 },
 
 date: {
@@ -391,4 +418,121 @@ header: {
   paddingVertical: 20,
 },
 
+activityBox2: {
+  borderWidth: 1,
+  borderColor: '#921d1d',
+  borderRadius: 12,
+  paddingVertical: 14,
+  paddingHorizontal: 18,
+  marginHorizontal: 25,
+  marginBottom: 12,
+},
+
+activity2: {
+  color: '#921d1d',
+  fontSize: 13,
+},
+
+activityBox3: {
+  borderWidth: 1,
+  backgroundColor: '#ce3535',
+  borderRadius: 12,
+  paddingVertical: 14,
+  paddingHorizontal: 18,
+  marginHorizontal: 25,
+  marginTop: 80,
+
+},
+
+activity3: {
+  color: '#faf7f7',
+  fontSize: 13,
+},
+
+  logobelow: {
+    color: '#ddd',
+    fontSize: 12,
+  },
+
+  Card: {
+    flex: 1,
+    backgroundColor: '#0B2119',
+    borderTopLeftRadius: 25,
+    borderTopRightRadius: 25,
+    padding: 45,
+  },
+
+  label: {
+    color: '#fff',
+    marginBottom: 5,
+  },
+
+  input: {
+    backgroundColor: '#00100B',
+    color: '#fff',
+    padding: 12,
+    borderRadius: 5,
+    marginBottom: 12,
+  },
+
+  row: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+
+  field: {
+    flex: 1,
+  },
+
+  button: {
+    backgroundColor: '#48DDB0',
+    padding: 12,
+    borderRadius: 5,
+    alignItems: 'center',
+    marginTop: 20,
+    width: 130,
+    alignSelf: 'center',
+  },
+
+  buttonText: {
+    color: '#00382B',
+    fontSize: 14,
+  },
+
+  login: {
+    color: '#fff',
+    textAlign: 'center',
+    marginTop: 70,
+    fontSize: 12,
+  },
+
+   title:{
+    color:'#fff',
+    fontSize:30,
+    textAlign:'center',
+    fontFamily:'serif',
+    margintop: 40,
+  },
+
+  description:{
+    color:'#ccc',
+    textAlign:'center',
+    marginBottom:25,
+  },
+    container: {
+    flex: 1,
+    backgroundColor: '#020D09',
+  },
+
+  logoContainer: {
+    height: 130,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  logo: {
+    color: '#fff',
+    fontSize: 28,
+    fontFamily: 'serif',
+  }
 });

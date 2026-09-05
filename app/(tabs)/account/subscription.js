@@ -1,15 +1,44 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { useState } from 'react';
 import {
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
-
-export default function ProfileScreen() {
+const PLANS = [
+  {
+    id: 'free',
+    name: 'Free Plan',
+    price: null,
+    features: [
+      '1 recommendation per day',
+      'Technical explanations only',
+      'View progress history for the last 7 days',
+      'View regular progress charts',
+      'Manual sleep input',
+    ],
+  },
+  {
+    id: 'premium',
+    name: 'Premium Plan',
+    price: '$10/month',
+    features: [
+      'Unlimited recommendations',
+      'Toggle between technical and plain-language explanations',
+      'View full progress history',
+      'View advanced progress charts',
+      'Automatic sleep tracking',
+      'Generate formatted health report',
+    ],
+  },
+];
+export default function Subscription() {
+ // State to track the current plan
+  const [currentPlan, setCurrentPlan] = useState('free'); // Default to Premium Plan
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView>
@@ -24,40 +53,45 @@ export default function ProfileScreen() {
         <View style={styles.divider} />
         <View>
             <Text style = {styles.title}>
-                Log
+                Subscription
             </Text>
             <Text style = {styles.description}>
-                What would you like to log?
+                Choose your plan 
             </Text>
-    
-        <View style={[styles.step, styles.activityBox]}>
-            <Text
-                  style={styles.activity}
-                  onPress={() => router.push('/log/activities/activities')}
-                  >
-                  My Activities
-            </Text>
-        </View>
+            // checks if the current plan is premium or free and displays the appropriate message
+            {PLANS.map((plan) => {
+              const isCurrent = currentPlan === plan.id;
 
-        <View style={[styles.step, styles.activityBox]}>
-            <Text
-                  style={styles.activity}
-                  onPress={() => router.push('/log/sleep')}
-                  >
-                  My Sleep
-            </Text>
-        </View>
+              return (
+                <View key={plan.id} style={[styles.planCard, isCurrent && styles.planCardActive]}>
+                  // If the plan is the current plan, display a badge
+                  {isCurrent && (
+                    <View style={styles.badge}>
+                      <Text style={styles.badgeText}>Current</Text>
+                    </View>
+                  )}
 
-        <View style={[styles.step, styles.activityBox]}>
-            <Text
-                  style={styles.activity}
-                  onPress={() => router.push('/log/foodintake')}
-                  >
-                  My Food intake
-            </Text>
-        </View>
+                  <Text style={styles.planName}>{plan.name}</Text>
 
-        
+                  {plan.features.map((f) => (
+                    <Text key={f} style={styles.feature}>• {f}</Text>
+                  ))}
+
+                  {plan.price && (
+                    <View style={styles.priceRow}>
+                      <Text style={styles.price}>{plan.price}</Text>
+                      <TouchableOpacity style={styles.planButton}
+                      onPress={() => setCurrentPlan(isCurrent ? 'free' : 'premium')}>
+                        <Text style={styles.planButtonText}>
+                          {isCurrent ? 'Cancel Subscription' : 'Get Premium'}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
+              );
+            })}
+
       </View>
     </ScrollView>
     </SafeAreaView>
@@ -391,4 +425,103 @@ header: {
   paddingVertical: 20,
 },
 
+activityBox2: {
+  borderWidth: 1,
+  borderColor: '#921d1d',
+  borderRadius: 12,
+  paddingVertical: 14,
+  paddingHorizontal: 18,
+  marginHorizontal: 25,
+  marginBottom: 12,
+},
+
+activity2: {
+  color: '#921d1d',
+  fontSize: 13,
+},
+
+activityBox3: {
+  borderWidth: 1,
+  backgroundColor: '#ce3535',
+  borderRadius: 12,
+  paddingVertical: 14,
+  paddingHorizontal: 18,
+  marginHorizontal: 25,
+  marginTop: 80,
+
+},
+
+activity3: {
+  color: '#faf7f7',
+  fontSize: 13,
+},
+
+planCard: {
+  borderWidth: 1,
+  borderColor: '#123B2F',
+  borderRadius: 16,
+  padding: 20,
+  marginHorizontal: 25,
+  marginBottom: 16,
+},
+
+planCardActive: {
+  borderColor: '#48DDB0',
+},
+
+badge: {
+  position: 'absolute',
+  top: 0,
+  right: 0,
+  backgroundColor: '#48DDB0',
+  borderTopRightRadius: 16,
+  borderBottomLeftRadius: 12,
+  paddingHorizontal: 12,
+  paddingVertical: 4,
+},
+
+badgeText: {
+  color: '#00382B',
+  fontSize: 10,
+  fontWeight: '600',
+},
+
+planName: {
+  color: '#fff',
+  fontSize: 18,
+  fontFamily: 'serif',
+  marginBottom: 12,
+},
+
+feature: {
+  color: '#D4E6DF',
+  fontSize: 12,
+  lineHeight: 20,
+},
+
+priceRow: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  marginTop: 20,
+},
+
+price: {
+  color: '#48DDB0',
+  fontSize: 22,
+  fontWeight: '600',
+},
+
+planButton: {
+  backgroundColor: '#102A21',
+  borderRadius: 8,
+  paddingHorizontal: 16,
+  paddingVertical: 10,
+},
+
+planButtonText: {
+  color: '#fff',
+  fontSize: 12,
+  textAlign: 'center',
+},
 });

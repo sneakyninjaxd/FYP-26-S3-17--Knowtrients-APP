@@ -15,34 +15,53 @@ export default function ProfileScreen() {
       <ScrollView>
         {/* Logo */}
         <View style={styles.header}>
-          <Text
-            style={[
-              styles.logo,
-              styles.profileLogo
-            ]}
-          >
-            ✦ Knowtrients
-          </Text>
+          <Text style={styles.logo}>✦ Knowtrients</Text>
 
-        <TouchableOpacity onPress={() => router.push('/account/account')}>
-          <Ionicons name="person-circle" size={32} color="#48DDB0" />
-        </TouchableOpacity>
+          <TouchableOpacity onPress={() => router.push('/account/account')}>
+            <Ionicons name="person-circle" size={32} color="#48DDB0" />
+          </TouchableOpacity>
         </View>
         <View style={styles.divider} />
         <View>
+            <Text style = {styles.title}>
+                My Activities
+            </Text>
             <Text style={styles.date}>
             {new Date().toLocaleDateString('en-GB', {weekday: 'long', 
                                                     day: 'numeric', 
-                                                    month: 'long', 
-                                                    year: 'numeric',})}
-
+                                                    month: 'long', })}
             </Text>
-            <Text style = {styles.title}>
-                Good evening, User
+    
+        <View style={[styles.step, styles.activityBox]}>
+            <Text
+                  style={styles.activity}
+                  onPress={() => router.push('/log/activities/activities')}
+                  >
+                  My Activities
             </Text>
         </View>
 
-        </ScrollView>
+        <View style={[styles.step, styles.activityBox]}>
+            <Text
+                  style={styles.activity}
+                  onPress={() => router.push('/log/sleep')}
+                  >
+                  My Sleep
+            </Text>
+        </View>
+
+        <View style={[styles.step, styles.activityBox]}>
+            <Text
+                  style={styles.activity}
+                  onPress={() => router.push('/log/foodintake')}
+                  >
+                  My Food intake
+            </Text>
+        </View>
+
+        
+      </View>
+    </ScrollView>
     </SafeAreaView>
 
   );
@@ -102,10 +121,11 @@ const styles = StyleSheet.create({
 
 title: {
   color: '#FFFFFF',
-  fontSize: 28,
+  fontSize: 35,
   fontFamily: 'serif',
   marginBottom: 5,
   paddingLeft: 25,
+  paddingTop: 10,
 },
 
   description: {
@@ -113,6 +133,7 @@ title: {
     fontSize: 13,
     lineHeight: 17,
     marginBottom: 20,
+    paddingLeft: 25,
   },
 
 
@@ -327,13 +348,49 @@ date: {
     fontFamily: 'serif',
   },
 
-  header: {
+    step: {
+    flex: 1,
+  },
+
+  activeStep: {
+    color: '#48DDB0',
+    fontSize: 10,
+    marginBottom: 5,
+  },
+
+  inactiveStep: {
+    color: '#17644E',
+    fontSize: 10,
+    marginBottom: 5,
+  },
+
+  activeLine: {
+    height: 3,
+    backgroundColor: '#48DDB0',
+    borderRadius: 5,
+  },
+
+activityBox: {
+  borderWidth: 1,
+  borderColor: '#123B2F',
+  borderRadius: 12,
+  paddingVertical: 14,
+  paddingHorizontal: 18,
+  marginHorizontal: 25,
+  marginBottom: 12,
+},
+
+activity: {
+  color: '#3AA889',
+  fontSize: 13,
+},
+
+header: {
   flexDirection: 'row',
   alignItems: 'center',
   justifyContent: 'space-between',
   paddingHorizontal: 25,
   paddingVertical: 20,
 },
-  
 
 });
