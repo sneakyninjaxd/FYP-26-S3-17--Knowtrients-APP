@@ -1,16 +1,12 @@
-import {
-  DarkTheme,
-  DefaultTheme,
-  ThemeProvider,
-} from "@react-navigation/native";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { ActivityIndicator, View } from "react-native";
 import "react-native-reanimated";
 
 import { brand } from "@/constants/brand";
+import { ActivityProvider } from "@/contexts/activity-context";
 import { AuthProvider, useAuth } from "@/contexts/auth-context";
-import { useColorScheme } from "@/hooks/use-color-scheme";
+import { SleepProvider } from "@/contexts/sleep-context";
 
 export const unstable_settings = {
   anchor: "(tabs)",
@@ -20,8 +16,6 @@ function RootNavigator() {
   const { user, isLoading } = useAuth();
 
   if (isLoading) {
-    // Restoring a saved session on app start — show a blank loading state
-    // instead of flashing the login screen before we know the real status.
     return (
       <View
         style={{
@@ -38,9 +32,6 @@ function RootNavigator() {
 
   return (
     <Stack screenOptions={{ headerShown: false }}>
-      {/* Stack.Protected keeps unauthenticated users out of (tabs), and
-          redirects logged-in users away from (auth), without manual
-          imperative navigation calls scattered around the app. */}
       <Stack.Protected guard={true}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen
@@ -56,14 +47,14 @@ function RootNavigator() {
 }
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
-
   return (
-    <AuthProvider>
-      <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
-        <RootNavigator />
-        <StatusBar style="auto" />
-      </ThemeProvider>
-    </AuthProvider>
+<AuthProvider>
+  <ActivityProvider>
+    <SleepProvider>
+      <RootNavigator />
+      <StatusBar style="auto" />
+    </SleepProvider>
+  </ActivityProvider>
+</AuthProvider>
   );
 }

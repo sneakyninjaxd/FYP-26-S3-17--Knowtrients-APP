@@ -42,7 +42,7 @@ export default function ProfileScreen() {
         <View style={[styles.step, styles.activityBox]}>
             <Text
                   style={styles.activity}
-                  onPress={() => router.push('/log/sleep')}
+                  onPress={() => router.push('/log/sleep/sleep')}
                   >
                   My Sleep
             </Text>
