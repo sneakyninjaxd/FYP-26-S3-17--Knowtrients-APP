@@ -1,12 +1,12 @@
+import { brand } from "@/constants/brand";
+import { ActivityProvider } from "@/contexts/activity-context";
+import { AuthProvider, useAuth } from "@/contexts/auth-context";
+import { FoodProvider } from "@/contexts/food-context";
+import { SleepProvider } from "@/contexts/sleep-context";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { ActivityIndicator, View } from "react-native";
 import "react-native-reanimated";
-
-import { brand } from "@/constants/brand";
-import { ActivityProvider } from "@/contexts/activity-context";
-import { AuthProvider, useAuth } from "@/contexts/auth-context";
-import { SleepProvider } from "@/contexts/sleep-context";
 
 export const unstable_settings = {
   anchor: "(tabs)",
@@ -51,8 +51,10 @@ export default function RootLayout() {
 <AuthProvider>
   <ActivityProvider>
     <SleepProvider>
-      <RootNavigator />
-      <StatusBar style="auto" />
+      <FoodProvider>
+        <RootNavigator />
+        <StatusBar style="auto" />
+      </FoodProvider>
     </SleepProvider>
   </ActivityProvider>
 </AuthProvider>
