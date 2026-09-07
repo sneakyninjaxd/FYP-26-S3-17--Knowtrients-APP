@@ -5,7 +5,6 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Example: postgresql://app_user:yourpassword@localhost:5432/knowtrients
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://app_user:yourpassword@localhost:5432/knowtrients")
 
 engine = create_engine(DATABASE_URL)

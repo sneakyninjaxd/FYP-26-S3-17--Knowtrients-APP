@@ -1,15 +1,48 @@
-from fastapi import FastAPI, Depends, HTTPException, status
+"""Knowtrients API entry point."""
+
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import OAuth2PasswordBearer
-from sqlalchemy.orm import Session
 
-from . import models, schemas, auth
-from .database import engine, get_db
+from . import models
+from .database import engine
+from .routers import auth_routes, logs, profile, recommendation
 
-# Creates tables if they don't exist yet (use Alembic migrations for real schema changes)
+# Creates tables if they don't exist. Adequate for the project; a schema change
+# to an existing table still needs a migration (Alembic) since create_all only
+# ever adds, never alters.
 models.Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="Knowtrients API")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Warms the model at start-up rather than on the first request.
+
+    Loading the XGBoost model and the SHAP explainer takes a few seconds. On a
+    suspended free-tier instance (C-05) that cost would otherwise land on
+    whichever user happens to trigger the cold start.
+    """
+    try:
+        from .ml import recommender
+
+        recommender._load()
+        print("Model artefacts loaded.")
+    except FileNotFoundError:
+        # The API still serves auth and logging without the model; the
+        # recommendation routes return 503 until artefacts are present.
+        print("Model artefacts not found — recommendation endpoints will return 503.")
+    except Exception as exc:  # noqa: BLE001
+        print(f"Model artefacts failed to load: {exc}")
+
+    yield
+
+
+app = FastAPI(title="Knowtrients API", version="1.0.0", lifespan=lifespan)
+
+# Expo Go sends no browser origin from a native build, and the dev URL varies
+# per machine. Left open for the project; tighten before any production use.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -18,54 +51,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
+app.include_router(auth_routes.router)
+app.include_router(profile.router)
+app.include_router(logs.router)
+app.include_router(recommendation.router)
 
 
-@app.post("/signup", response_model=schemas.TokenResponse, status_code=status.HTTP_201_CREATED)
-def create_account(payload: schemas.CreateAccountRequest, db: Session = Depends(get_db)):
-    """Handles the 'Create Account' screen."""
-    existing_user = db.query(models.User).filter(models.User.email == payload.email).first()
-    if existing_user:
-        raise HTTPException(status_code=400, detail="An account with this email already exists")
-
-    new_user = models.User(
-        email=payload.email,
-        first_name=payload.first_name,
-        last_name=payload.last_name,
-        hashed_password=auth.hash_password(payload.password),
-    )
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
-
-    token = auth.create_access_token(data={"sub": str(new_user.id)})
-    return schemas.TokenResponse(access_token=token, user=new_user)
-
-
-@app.post("/login", response_model=schemas.TokenResponse)
-def login(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
-    """Handles the 'Login' screen."""
-    user = db.query(models.User).filter(models.User.email == payload.email).first()
-    if not user or not auth.verify_password(payload.password, user.hashed_password):
-        raise HTTPException(status_code=401, detail="Incorrect email or password")
-
-    token = auth.create_access_token(data={"sub": str(user.id)})
-    return schemas.TokenResponse(access_token=token, user=user)
-
-
-def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> models.User:
-    """Dependency to protect routes that need a logged-in user (e.g. the Home Dashboard)."""
-    payload = auth.decode_access_token(token)
-    if payload is None:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
-
-    user = db.query(models.User).filter(models.User.id == int(payload["sub"])).first()
-    if user is None:
-        raise HTTPException(status_code=401, detail="User not found")
-    return user
-
-
-@app.get("/me", response_model=schemas.UserResponse)
-def read_current_user(current_user: models.User = Depends(get_current_user)):
-    """Example protected route the app can call after login to load the dashboard."""
-    return current_user
+@app.get("/health", tags=["meta"])
+def health():
+    """Cheap endpoint for uptime checks and for waking a suspended instance."""
+    return {"status": "ok"}
