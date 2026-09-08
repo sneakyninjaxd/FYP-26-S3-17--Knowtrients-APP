@@ -51,6 +51,7 @@ export default function TabLayout() {
       <Tabs.Screen name="account/account" options={{ href: null }} />
       <Tabs.Screen name="account/accountdetails" options={{ href: null }} />
       <Tabs.Screen name="account/subscription" options={{ href: null }} />
+      
     </Tabs>
   );
 }

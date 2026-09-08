@@ -2,12 +2,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import {
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 const PLANS = [
   {
@@ -37,8 +37,8 @@ const PLANS = [
   },
 ];
 export default function Subscription() {
- // State to track the current plan
-  const [currentPlan, setCurrentPlan] = useState('free'); // Default to Premium Plan
+ {/* State to track the current plan */}
+  const [currentPlan, setCurrentPlan] = useState('free'); {/*Default to Premium Plan*/}
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView>
@@ -58,13 +58,13 @@ export default function Subscription() {
             <Text style = {styles.description}>
                 Choose your plan 
             </Text>
-            // checks if the current plan is premium or free and displays the appropriate message
+            {/* checks if the current plan is premium or free and displays the appropriate message */}
             {PLANS.map((plan) => {
               const isCurrent = currentPlan === plan.id;
 
               return (
                 <View key={plan.id} style={[styles.planCard, isCurrent && styles.planCardActive]}>
-                  // If the plan is the current plan, display a badge
+                  {/* If the plan is the current plan, display a badge */}
                   {isCurrent && (
                     <View style={styles.badge}>
                       <Text style={styles.badgeText}>Current</Text>

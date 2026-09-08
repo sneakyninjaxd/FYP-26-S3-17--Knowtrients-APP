@@ -10,13 +10,13 @@ import {
 
 export default function ProfileScreen() {
 
-  const MEALS = [
-  { name: 'Breakfast', items: 1, calories: 480 },
-  { name: 'Lunch', items: 3, calories: 785 },
-  { name: 'Dinner', items: 1, calories: 487 },
-  { name: 'Morning Snack', items: 0, calories: 0 },
-  { name: 'Afternoon Snack', items: 0, calories: 0 },
-  { name: 'Evening Snack', items: 0, calories: 0 },
+const MEALS = [
+  { id: 'breakfast',       name: 'Breakfast',       items: 1, calories: 480 },
+  { id: 'lunch',           name: 'Lunch',           items: 3, calories: 785 },
+  { id: 'dinner',          name: 'Dinner',          items: 1, calories: 487 },
+  { id: 'morning-snack',   name: 'Morning Snack',   items: 0, calories: 0 },
+  { id: 'afternoon-snack', name: 'Afternoon Snack', items: 0, calories: 0 },
+  { id: 'evening-snack',   name: 'Evening Snack',   items: 0, calories: 0 },
 ];
   return (
     <SafeAreaView style={styles.container}>

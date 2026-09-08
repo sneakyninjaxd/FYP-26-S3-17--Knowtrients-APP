@@ -2,6 +2,7 @@ import { brand } from "@/constants/brand";
 import { ActivityProvider } from "@/contexts/activity-context";
 import { AuthProvider, useAuth } from "@/contexts/auth-context";
 import { FoodProvider } from "@/contexts/food-context";
+import { ProfileProvider } from "@/contexts/profile-context";
 import { SleepProvider } from "@/contexts/sleep-context";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -49,14 +50,16 @@ function RootNavigator() {
 export default function RootLayout() {
   return (
 <AuthProvider>
-  <ActivityProvider>
-    <SleepProvider>
-      <FoodProvider>
-        <RootNavigator />
-        <StatusBar style="auto" />
-      </FoodProvider>
-    </SleepProvider>
-  </ActivityProvider>
+  <ProfileProvider>
+    <ActivityProvider>
+      <SleepProvider>
+        <FoodProvider>
+          <RootNavigator />
+          <StatusBar style="auto" />
+        </FoodProvider>
+      </SleepProvider>
+    </ActivityProvider>
+  </ProfileProvider>
 </AuthProvider>
   );
 }
