@@ -5,21 +5,16 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import {
   Platform,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
-const GOALS = { steps: 10000, calories: 2500, activeTime: 90 };
-const TODAY = { steps: 8540, calories: 1800, activeTime: 60 };
 
-const ACTIVITIES = [
-  { id: '1', name: 'Morning Run', type: 'Running', time: '7:31 AM',
-    duration: '35min', intensity: 'Moderate', calories: 350 },
-];
+const GOALS = { steps: 10000, calories: 2500, activeTime: 90 };
 
 const WEEK = [
   { label: 'Mon', value: 5000 },
@@ -30,6 +25,7 @@ const WEEK = [
   { label: 'Sat', value: 10000 },
   { label: 'Sun', value: 6000 },
 ];
+
 const MAX = 10000;
 const pct = (value, goal) => Math.min((value / goal) * 100, 100);
 
@@ -70,8 +66,19 @@ export default function Activities() {
   const [showPicker, setShowPicker] = useState(false);
 
   const visible = activities.filter(
-  (a) => a.date === date.toISOString().split('T')[0]
-);
+    (a) => a.date === date.toISOString().split('T')[0]
+  );
+
+  const activeTime = visible.reduce(
+    (sum, a) => sum + (parseInt(a.duration) || 0), 0
+  );
+
+  const caloriesBurnt = visible.reduce(
+    (sum, a) => sum + (a.calories || 0), 0
+  );
+
+  const TODAY = { steps: 0, calories: caloriesBurnt, activeTime };
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
@@ -84,32 +91,32 @@ export default function Activities() {
         </View>
         <View style={styles.divider} />
 
-<View style={styles.titleRow}>
-  <View>
-    <Text style={styles.title}>My Activities</Text>
-    <Text style={styles.date}>
-      {date.toLocaleDateString('en-GB', {
-        weekday: 'long', day: 'numeric', month: 'long',
-      })}
-    </Text>
-  </View>
+        <View style={styles.titleRow}>
+          <View>
+            <Text style={styles.title}>My Activities</Text>
+            <Text style={styles.date}>
+              {date.toLocaleDateString('en-GB', {
+                weekday: 'long', day: 'numeric', month: 'long',
+              })}
+            </Text>
+          </View>
 
-  <TouchableOpacity onPress={() => setShowPicker(true)}>
-    <Ionicons name="calendar-outline" size={26} color="#48DDB0" />
-  </TouchableOpacity>
-</View>
+          <TouchableOpacity onPress={() => setShowPicker(true)}>
+            <Ionicons name="calendar-outline" size={26} color="#48DDB0" />
+          </TouchableOpacity>
+        </View>
 
-{showPicker && (
-  <DateTimePicker
-    value={date}
-    mode="date"
-    maximumDate={new Date()}
-    onChange={(event, selected) => {
-      setShowPicker(Platform.OS === 'ios');
-      if (selected) setDate(selected);
-    }}
-  />
-)}
+        {showPicker && (
+          <DateTimePicker
+            value={date}
+            mode="date"
+            maximumDate={new Date()}
+            onChange={(event, selected) => {
+              setShowPicker(Platform.OS === 'ios');
+              if (selected) setDate(selected);
+            }}
+          />
+        )}
 
         {/* Daily Activities card */}
         <View style={styles.card}>
@@ -135,6 +142,13 @@ export default function Activities() {
                    unit="mins" color="#C77D3A" />
             </View>
           </View>
+
+          <Text
+            style={styles.statsLink}
+            onPress={() => router.push('/log/activities/statistics')}
+          >
+            View Overall Activities Statistics ›
+          </Text>
         </View>
 
         {/* Section header */}
@@ -149,58 +163,58 @@ export default function Activities() {
         </View>
 
         {/* Activity list */}
-    {visible.map((a) => (
-  <View key={a.id} style={styles.activityCard}>
-    <View style={styles.activityTop}>
-      <View>
-        <Text style={styles.activityName}>{a.name}</Text>
-        <Text style={styles.activityMeta}>{a.type} • {a.time}</Text>
-      </View>
-      <TouchableOpacity onPress={() => deleteActivity(a.id)}>
-        <Ionicons name="trash-outline" size={18} color="#60766E" />
-      </TouchableOpacity>
-    </View>
+        {visible.map((a) => (
+          <View key={a.id} style={styles.activityCard}>
+            <View style={styles.activityTop}>
+              <View>
+                <Text style={styles.activityName}>{a.name}</Text>
+                <Text style={styles.activityMeta}>{a.type} • {a.time}</Text>
+              </View>
+              <TouchableOpacity onPress={() => deleteActivity(a.id)}>
+                <Ionicons name="trash-outline" size={18} color="#60766E" />
+              </TouchableOpacity>
+            </View>
 
-    <View style={styles.tagRow}>
-      <View style={styles.tag}>
-        <Text style={styles.tagText}>{a.duration}</Text>
-      </View>
-      <View style={styles.tag}>
-        <Text style={styles.tagText}>{a.intensity}</Text>
-      </View>
-      <View style={styles.tagActive}>
-        <Text style={styles.tagTextActive}>~{a.calories} kcal</Text>
-      </View>
-    </View>
-  </View>
-))}
-{visible.length === 0 && (
-  <Text style={styles.empty}>No activities logged yet.</Text>
-)}
+            <View style={styles.tagRow}>
+              <View style={styles.tag}>
+                <Text style={styles.tagText}>{a.duration}</Text>
+              </View>
+              <View style={styles.tag}>
+                <Text style={styles.tagText}>{a.intensity}</Text>
+              </View>
+              <View style={styles.tagActive}>
+                <Text style={styles.tagTextActive}>~{a.calories} kcal</Text>
+              </View>
+            </View>
+          </View>
+        ))}
 
-<View style={styles.chartCard}>
-  <Text style={styles.chartTitle}>Steps over the last 7 days</Text>
+        {visible.length === 0 && (
+          <Text style={styles.empty}>No activities logged yet.</Text>
+        )}
 
-  <View style={styles.chartArea}>
-    {/* gridlines + labels */}
-    {[10000, 8000, 6000, 4000, 2000, 0].map((tick) => (
-      <View key={tick} style={[styles.gridRow, { bottom: (tick / MAX) * 140 + 24 }]}>
-        <Text style={styles.gridLabel}>{tick/1000}k</Text>
-        <View style={styles.gridLine} />
-      </View>
-    ))}
+        {/* Weekly chart */}
+        <View style={styles.chartCard}>
+          <Text style={styles.chartTitle}>Steps over the last 7 days</Text>
 
-    {/* bars */}
-    <View style={styles.chartRow}>
-      {WEEK.map((d) => (
-        <View key={d.label} style={styles.chartColumn}>
-          <View style={[styles.chartBar, { height: (d.value / MAX) * 140 }]} />
-          <Text style={styles.chartLabel}>{d.label}</Text>
+          <View style={styles.chartArea}>
+            {[10000, 8000, 6000, 4000, 2000, 0].map((tick) => (
+              <View key={tick} style={[styles.gridRow, { bottom: (tick / MAX) * 140 + 24 }]}>
+                <Text style={styles.gridLabel}>{tick / 1000}k</Text>
+                <View style={styles.gridLine} />
+              </View>
+            ))}
+
+            <View style={styles.chartRow}>
+              {WEEK.map((d) => (
+                <View key={d.label} style={styles.chartColumn}>
+                  <View style={[styles.chartBar, { height: (d.value / MAX) * 140 }]} />
+                  <Text style={styles.chartLabel}>{d.label}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
         </View>
-      ))}
-    </View>
-  </View>
-</View>
 
       </ScrollView>
     </SafeAreaView>
@@ -222,15 +236,18 @@ const styles = StyleSheet.create({
 
   divider: { height: 1, backgroundColor: '#123B2F' },
 
-  title: {
-    color: '#FFFFFF',
-    fontSize: 32,
-    fontFamily: 'serif',
-    paddingLeft: 25,
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    paddingHorizontal: 25,
     paddingTop: 20,
+    marginBottom: 16,
   },
 
-  date: { color: '#48DDB0', fontSize: 12, paddingLeft: 25, marginTop: 4, marginBottom: 16 },
+  title: { color: '#FFFFFF', fontSize: 32, fontFamily: 'serif' },
+
+  date: { color: '#48DDB0', fontSize: 12, marginTop: 4 },
 
   card: {
     backgroundColor: '#07140F',
@@ -243,6 +260,13 @@ const styles = StyleSheet.create({
   cardRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   cardRight: { flex: 1 },
   cardTitle: { color: '#fff', fontSize: 18, fontFamily: 'serif', marginBottom: 14 },
+
+  statsLink: {
+    color: '#60766E',
+    fontSize: 9,
+    textAlign: 'right',
+    marginTop: 10,
+  },
 
   barBlock: { marginBottom: 12 },
   barTop: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
@@ -316,61 +340,31 @@ const styles = StyleSheet.create({
 
   chartTitle: { color: '#fff', fontSize: 14, marginBottom: 20 },
 
+  chartArea: { position: 'relative', height: 180 },
+
+  gridRow: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+
+  gridLabel: { color: '#60766E', fontSize: 10, width: 24, textAlign: 'right' },
+  gridLine: { flex: 1, height: 1, backgroundColor: '#123B2F' },
+
   chartRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     justifyContent: 'space-around',
     height: 170,
+    paddingLeft: 24,
   },
 
   chartColumn: { alignItems: 'center' },
 
-  chartBar: {
-    width: 18,
-    backgroundColor: '#4ECBA0',
-    borderRadius: 9,
-  },
+  chartBar: { width: 18, backgroundColor: '#4ECBA0', borderRadius: 9 },
 
   chartLabel: { color: '#60766E', fontSize: 10, marginTop: 8 },
-
-  chartArea: { position: 'relative', height: 180 },
-
-gridRow: {
-  position: 'absolute',
-  left: 0,
-  right: 0,
-  flexDirection: 'row',
-  alignItems: 'center',
-  gap: 6,
-},
-
-gridLabel: { color: '#60766E', fontSize: 10, width: 24, textAlign: 'right' },
-
-gridLine: { flex: 1, height: 1, backgroundColor: '#123B2F' },
-
-chartRow: {
-  flexDirection: 'row',
-  alignItems: 'flex-end',
-  justifyContent: 'space-around',
-  height: 170,
-  paddingLeft: 24,
-},
-
-empty: { color: '#60766E', fontSize: 12, textAlign: 'center', marginVertical: 20 },
-titleRow: {
-  flexDirection: 'row',
-  alignItems: 'flex-start',
-  justifyContent: 'space-between',
-  paddingHorizontal: 25,
-  paddingTop: 20,
-  marginBottom: 16,
-},
-
-title: {
-  color: '#FFFFFF',
-  fontSize: 32,
-  fontFamily: 'serif',
-},
-
-date: { color: '#48DDB0', fontSize: 12, marginTop: 4 },
 });

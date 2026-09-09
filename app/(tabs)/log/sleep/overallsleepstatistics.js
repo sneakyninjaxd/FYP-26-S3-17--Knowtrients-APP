@@ -1,27 +1,29 @@
+import { useProfile } from '@/contexts/profile-context';
 import { useSleep } from '@/contexts/sleep-context';
+import { RANGES } from '@/src/ranges';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import {
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-
 const MAX_HOURS = 10;
-const RANGES = [
-  { id: 'week', label: 'Over past week', days: 7 },
-  { id: 'month', label: 'Over past month', days: 30 },
-];
+
 
 export default function SleepStatistics() {
   const { sleepLogs } = useSleep();
-  const [range, setRange] = useState(RANGES[0]);
-  const [showRange, setShowRange] = useState(false);
+  const { profile } = useProfile();
+  const isPremium = profile.plan === 'premium';
 
+  const available = RANGES.filter((r) => !r.premium || isPremium);
+
+  const [range, setRange] = useState(available[0]);
+  const [showRange, setShowRange] = useState(false);
   // average duration across all logs
   const totalMinutes = sleepLogs.reduce(
     (sum, s) => sum + s.hours * 60 + s.minutes,
@@ -100,7 +102,7 @@ export default function SleepStatistics() {
 
           {showRange && (
             <View style={styles.rangeMenu}>
-              {RANGES.map((r) => (
+              {available.map((r) => (
                 <TouchableOpacity
                   key={r.id}
                   onPress={() => {

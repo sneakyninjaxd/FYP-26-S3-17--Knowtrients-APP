@@ -3,6 +3,7 @@ import { createContext, useContext, useState } from 'react';
 const ProfileContext = createContext(null);
 
 const EMPTY_PROFILE = {
+  plan: 'free',              // 'free' | 'premium'
   firstName: '',
   lastName: '',
   dateOfBirth: null,        // '2000-10-10'

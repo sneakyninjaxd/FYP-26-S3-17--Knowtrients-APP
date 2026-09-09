@@ -33,7 +33,7 @@ export default function ProfileScreen() {
         <View style={[styles.step, styles.activityBox]}>
             <Text
                   style={styles.activity}
-                  onPress={() => router.push('/log/activities/activities')}
+                  onPress={() => router.push('/log/activities')}
                   >
                   My Activities
             </Text>

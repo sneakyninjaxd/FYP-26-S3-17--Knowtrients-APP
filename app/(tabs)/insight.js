@@ -1,328 +1,303 @@
-import {SafeAreaView,Pressable,ScrollView,View,Text,TextInput,TouchableOpacity,StyleSheet,
-} from 'react-native';
-import { useState } from 'react';
+import { useProfile } from '@/contexts/profile-context';
+import { INSIGHTS } from '@/src/insights';
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import {  useSafeAreaInsets } from 'react-native-safe-area-context';
-import {DateTimePicker } from '@react-native-community/datetimepicker';
+import { useState } from 'react';
+import {
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
-export default function ProfileScreen() {
+export default function Insights() {
+  const { profile } = useProfile();
+  const isPremium = profile.plan === 'premium';
+
+  const [selected, setSelected] = useState(null);
+  const [mode, setMode] = useState('simple');
+
+  const openInsight = (insight) => {
+    setMode('simple');
+    setSelected(insight);
+  };
+
+  const reasoning =
+    selected && mode === 'technical'
+      ? selected.reasoningTechnical
+      : selected?.reasoningSimple ?? [];
+
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView>
-        {/* Logo */}
-        <View
-          style={[
-            styles.logoContainer,
-            styles.profileLogoContainer
-          ]}
-        >
-          <Text
-            style={[
-              styles.logo,
-              styles.profileLogo
-            ]}
-          >
-            ✦ Knowtrients
-          </Text>
+      <ScrollView contentContainerStyle={{ paddingBottom: 30 }}>
+
+        <View style={styles.header}>
+          <Text style={styles.logo}>✦ Knowtrients</Text>
+          <TouchableOpacity onPress={() => router.push('/account/account')}>
+            <Ionicons name="person-circle" size={32} color="#48DDB0" />
+          </TouchableOpacity>
         </View>
         <View style={styles.divider} />
-        <View>
-            <Text style={styles.date}>
-            {new Date().toLocaleDateString('en-GB', {weekday: 'long', 
-                                                    day: 'numeric', 
-                                                    month: 'long', 
-                                                    year: 'numeric',})}
 
+        <View style={styles.titleRow}>
+          <View>
+            <Text style={styles.title}>Insights</Text>
+            <Text style={styles.date}>
+              {new Date().toLocaleDateString('en-GB', {
+                weekday: 'long', day: 'numeric', month: 'long',
+              })}
+              {', '}
+              {new Date().toLocaleTimeString('en-GB', {
+                hour: 'numeric', minute: '2-digit',
+              })}
             </Text>
-            <Text style = {styles.title}>
-                Good evening, User
+          </View>
+
+          <TouchableOpacity
+            style={isPremium ? styles.refreshButton : styles.refreshDisabled}
+            disabled={!isPremium}
+          >
+            {!isPremium && (
+              <Ionicons name="lock-closed" size={11} color="#3A5049" />
+            )}
+            <Text style={isPremium ? styles.refreshText : styles.refreshTextDisabled}>
+              Refresh Insight
             </Text>
+          </TouchableOpacity>
         </View>
 
-        </ScrollView>
-    </SafeAreaView>
+        {/* Aspect cards */}
+        {INSIGHTS.map((insight) => (
+          <View key={insight.id} style={styles.card}>
+            <Text style={styles.cardTitle}>{insight.aspect}</Text>
 
+            <Text style={styles.cardLabel}>Observations</Text>
+
+            {insight.observations.map((obs, i) => (
+              <View key={i} style={styles.obsRow}>
+                <Ionicons
+                  name={obs.icon === 'alert' ? 'alert-circle' : 'warning'}
+                  size={11}
+                  color={obs.icon === 'alert' ? '#E0A33F' : '#C7A03A'}
+                />
+                <Text style={styles.obsText}>{obs.text}</Text>
+              </View>
+            ))}
+
+            {insight.conclusion !== '' && (
+              <>
+                <Text style={styles.cardLabel}>Conclusion</Text>
+                <Text style={styles.conclusion}>{insight.conclusion}</Text>
+              </>
+            )}
+
+            <TouchableOpacity
+              style={styles.explainButton}
+              onPress={() => openInsight(insight)}
+            >
+              <Text style={styles.explainText}>Click here to view full explanation</Text>
+            </TouchableOpacity>
+          </View>
+        ))}
+
+      </ScrollView>
+
+      {/* Popup */}
+      <Modal visible={selected !== null} transparent animationType="fade">
+        <View style={styles.overlay}>
+          <ScrollView
+            style={styles.modalCard}
+            contentContainerStyle={{ padding: 20 }}
+          >
+            {selected && (
+              <>
+                <View style={styles.modalHeader}>
+                  <Text style={styles.modalAspect}>{selected.aspect}</Text>
+
+                  <View style={styles.headerRight}>
+                  {isPremium && (
+                    <View style={styles.modeToggle}>
+                      {['simple', 'technical'].map((m) => (
+                        <TouchableOpacity key={m} onPress={() => setMode(m)}>
+                          <Text style={mode === m ? styles.modeActive : styles.mode}>
+                            {m === 'simple' ? 'Simple' : 'Technical'}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
+                  <Text style={styles.confidence}>Confidence: {selected.confidence}%</Text>
+                  </View>
+                </View>
+
+                <Text style={styles.modalTitle}>{selected.title}</Text>
+                <Text style={styles.modalSummary}>{selected.summary}</Text>
+
+                <Text style={styles.modalLabel}>Observation</Text>
+                <View style={styles.rule} />
+                <Text style={styles.modalBody}>{selected.observation}</Text>
+
+                <Text style={styles.modalLabel}>Data Used</Text>
+                <View style={styles.rule} />
+                {selected.dataUsed.map((d, i) => (
+                  <Text key={i} style={styles.modalBody}>• {d}</Text>
+                ))}
+
+                <Text style={styles.modalLabel}>Reasoning</Text>
+                <View style={styles.rule} />
+                {reasoning.map((step, i) => (
+                  <Text key={i} style={styles.modalBody}>{i + 1}. {step}</Text>
+                ))}
+
+                <Text style={styles.modalLabel}>Recommendation</Text>
+                <View style={styles.rule} />
+                <Text style={styles.modalBody}>{selected.recommendation}</Text>
+
+                {selected.footer !== '' && (
+                  <Text style={styles.modalFooter}>{selected.footer}</Text>
+                )}
+
+                <TouchableOpacity
+                  style={styles.closeButton}
+                  onPress={() => setSelected(null)}
+                >
+                  <Text style={styles.closeText}>Close</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </ScrollView>
+        </View>
+      </Modal>
+    </SafeAreaView>
   );
 }
 
-
 const styles = StyleSheet.create({
-  profileLogoContainer: {
-    alignItems: 'flex-start',
-    paddingLeft: 25,
-  },
+  container: { flex: 1, backgroundColor: '#020D09' },
 
-  profileLogo: {
-    fontSize: 20,
-  },
-
-  profileTagline: {
-    color: '#fff',
-    fontSize: 12,
-    marginTop: 3,
-  },
-
-    progressRow: {
-    flexDirection: 'row',
-    gap: 6,
-    marginBottom: 30,
-  },
-
-  step: {
-    flex: 1,
-  },
-
-  activeStep: {
-    color: '#48DDB0',
-    fontSize: 10,
-    marginBottom: 5,
-  },
-
-  inactiveStep: {
-    color: '#17644E',
-    fontSize: 10,
-    marginBottom: 5,
-  },
-
-  activeLine: {
-    height: 3,
-    backgroundColor: '#48DDB0',
-    borderRadius: 5,
-  },
-
-  inactiveLine: {
-    height: 3,
-    backgroundColor: '#123B2F',
-    borderRadius: 5,
-  },
-
-
-title: {
-  color: '#FFFFFF',
-  fontSize: 28,
-  fontFamily: 'serif',
-  marginBottom: 5,
-  paddingLeft: 25,
-},
-
-  description: {
-    color: '#3AA889',
-    fontSize: 13,
-    lineHeight: 17,
-    marginBottom: 20,
-  },
-
-
-    dateInput: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#10251E',
-    width: 135,
-    height: 38,
-    borderRadius: 7,
-    paddingHorizontal: 10,
-  },
-
-  input: {
-    flex: 1,
-    color: '#FFFFFF',
-    padding: 0,
-  },
-
-  icon: {
-    color: '#A5DCCC',
-    fontSize: 18,
-  },
-
-  label: {
-    color: '#D4E6DF',
-    fontSize: 12,
-    marginBottom: 7,
-    marginTop: 12,
-  },
-
-genderRow: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  marginTop: 10,
-},
-
-radioRow: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  marginLeft: 15,
-},
-
-circle: {
-  width: 12,
-  height: 12,
-  borderRadius: 6,
-  borderWidth: 1,
-  borderColor: '#FFFFFF',
-  justifyContent: 'center',
-  alignItems: 'center',
-},
-
-circleSelected: {
-  borderColor: '#48DDB0',
-},
-
-dot: {
-  width: 6,
-  height: 6,
-  borderRadius: 3,
-  backgroundColor: '#48DDB0',
-},
-
-genderText: {
-  color: '#D4E6DF',
-  fontSize: 12,
-  marginLeft: 5,
-},
-  countryInput: {
-    width: 165,
-    height: 38,
-    backgroundColor: '#10251E',
-    borderRadius: 7,
+  header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 12,
+    paddingHorizontal: 25,
+    paddingVertical: 20,
   },
 
-  placeholder: {
-    color: '#60766E',
-    fontSize: 12,
-  },
+  logo: { color: '#fff', fontSize: 20, fontFamily: 'serif' },
+  divider: { height: 1, backgroundColor: '#123B2F' },
 
-  arrow: {
-    color: '#48DDB0',
-    fontSize: 18,
-  },
-
-  helperText: {
-    color: '#60766E',
-    fontSize: 9,
-    marginTop: 7,
-  },
-
-  row: {
+  titleRow: {
     flexDirection: 'row',
-    gap: 20,
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    paddingHorizontal: 25,
+    paddingTop: 20,
+    marginBottom: 16,
   },
 
-  field: {
-    flex: 1,
-  },
+  title: { color: '#fff', fontSize: 32, fontFamily: 'serif' },
+  date: { color: '#3AA889', fontSize: 10, marginTop: 4 },
 
-  measureInput: {
-    height: 38,
-    backgroundColor: '#10251E',
-    borderRadius: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 10,
-  },
-
-  unit: {
-    color: '#48DDB0',
-    fontSize: 11,
-    fontWeight: 'bold',
-  },
-
-  conditionContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-
-  conditionButton: {
-    backgroundColor: '#102A21',
-    paddingVertical: 7,
-    paddingHorizontal: 20,
-    borderRadius: 20,
-  },
-
-  selectedCondition: {
-    backgroundColor: '#102A21',
-    borderWidth: 1,
-    borderColor: '#48DDB0',
-    paddingVertical: 7,
-    paddingHorizontal: 20,
-    borderRadius: 20,
-  },
-
-  conditionText: {
-    color: '#60766E',
-    fontSize: 11,
-  },
-
-  selectedText: {
-    color: '#48DDB0',
-    fontSize: 11,
-  },
-
-  conditionInput: {
-    height: 42,
-    borderWidth: 1,
-    borderColor: '#48DDB0',
-    borderRadius: 10,
-    marginTop: 8,
-    paddingHorizontal: 12,
-    color: '#FFFFFF',
-  },
-
-  conditionHelper: {
-    color: '#60766E',
-    fontSize: 9,
-    marginTop: 7,
-  },
-
-  continueButton: {
+  refreshButton: {
     backgroundColor: '#48DDB0',
-    width: 143,
-    height: 42,
-    borderRadius: 7,
-    justifyContent: 'center',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+
+  refreshDisabled: {
+    flexDirection: 'row',
     alignItems: 'center',
-    alignSelf: 'center',
-    marginTop: 45,
+    gap: 5,
+    backgroundColor: '#123B2F',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
   },
 
-  continueText: {
-    color: '#00382B',
-    fontSize: 14,
-    fontWeight: '600',
+  refreshText: { color: '#00382B', fontSize: 11, fontWeight: '600' },
+  refreshTextDisabled: { color: '#3A5049', fontSize: 11, fontWeight: '600' },
+
+  card: {
+    backgroundColor: '#07140F',
+    borderRadius: 14,
+    padding: 16,
+    marginHorizontal: 25,
+    marginBottom: 12,
   },
 
-  divider: {
-  backgroundColor: '#123B2F',
-  height: '1%',
-},
+  cardTitle: { color: '#fff', fontSize: 15, fontFamily: 'serif', marginBottom: 10 },
 
-date: {
-  color: '#48DDB0',
-  fontSize: 12,
-  paddingLeft: 25,
-  marginTop: 20,
-  marginBottom: 6,
-},
-  container: {
+  cardLabel: { color: '#D4E6DF', fontSize: 10, marginTop: 8, marginBottom: 5 },
+
+  obsRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 3 },
+  obsText: { color: '#C7A03A', fontSize: 10 },
+
+  conclusion: { color: '#60766E', fontSize: 9, lineHeight: 13 },
+
+  explainButton: {
+    backgroundColor: '#0E2A20',
+    borderWidth: 1,
+    borderColor: '#48DDB0',
+    borderRadius: 8,
+    paddingVertical: 9,
+    alignItems: 'center',
+    marginTop: 12,
+  },
+
+  explainText: { color: '#48DDB0', fontSize: 10 },
+
+  overlay: {
     flex: 1,
-    backgroundColor: '#020D09',
-  },
-
-  logoContainer: {
-    height: 130,
+    backgroundColor: 'rgba(0,0,0,0.75)',
     justifyContent: 'center',
+    padding: 20,
+  },
+
+  modalCard: {
+    backgroundColor: '#07140F',
+    borderRadius: 14,
+    maxHeight: '85%',
+  },
+
+  modalHeader: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
   },
 
-  logo: {
-    color: '#fff',
-    fontSize: 28,
-    fontFamily: 'serif',
-  },
-  
+  modalAspect: { color: '#fff', fontSize: 15, fontFamily: 'serif' },
 
+  modeToggle: { flexDirection: 'row', gap: 10 },
+  mode: { color: '#3A5049', fontSize: 9 },
+  modeActive: { color: '#48DDB0', fontSize: 9, fontWeight: '600' },
+
+  modalTitle: { color: '#fff', fontSize: 13, fontWeight: '600', marginTop: 12 },
+
+  modalSummary: { color: '#D4E6DF', fontSize: 10, lineHeight: 14, marginTop: 6 },
+
+  modalLabel: { color: '#D4E6DF', fontSize: 10, fontWeight: '600', marginTop: 14 },
+
+  rule: { height: 1, backgroundColor: '#123B2F', marginVertical: 5 },
+
+  modalBody: { color: '#A5C4B8', fontSize: 9, lineHeight: 14 },
+
+  modalFooter: { color: '#fff', fontSize: 11, fontWeight: '600', marginTop: 16 },
+
+  closeButton: {
+    backgroundColor: '#4ECBA0',
+    borderRadius: 8,
+    paddingVertical: 11,
+    alignItems: 'center',
+    marginTop: 20,
+    marginHorizontal: 40,
+  },
+
+  closeText: { color: '#00382B', fontSize: 13, fontWeight: '600' },
+  headerRight: { alignItems: 'flex-end', gap: 4 },
+
+confidence: { color: '#60766E', fontSize: 9 },
 });
