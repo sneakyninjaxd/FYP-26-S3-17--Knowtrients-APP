@@ -11,6 +11,27 @@ from ..deps import get_current_user
 router = APIRouter(tags=["auth"])
 
 
+def assign_display_id(db: Session, user: models.User) -> None:
+    """
+    Gives the account a human-readable id (U001, A001, M001).
+
+    Numbered per role so the admin tables can show an id that communicates the
+    account kind. Falls back to the primary key if the count query races.
+    """
+    prefix = models.ROLE_ID_PREFIX.get(user.role, "U")
+    count = (
+        db.query(models.User)
+        .filter(models.User.role == user.role, models.User.id <= user.id)
+        .count()
+    )
+    candidate = f"{prefix}{count:03d}"
+
+    if db.query(models.User).filter(models.User.display_id == candidate).first():
+        candidate = f"{prefix}{user.id:03d}"
+
+    user.display_id = candidate
+
+
 def _user_response(user: models.User) -> schemas.UserResponse:
     """Includes onboarding state so the client knows whether to route the user
     into the profile flow or straight to the dashboard."""
@@ -20,6 +41,8 @@ def _user_response(user: models.User) -> schemas.UserResponse:
         first_name=user.first_name,
         last_name=user.last_name,
         onboarding_complete=bool(user.profile and user.profile.onboarding_complete),
+        role=user.role,
+        display_id=user.display_id,
     )
 
 
@@ -38,6 +61,8 @@ def create_account(payload: schemas.CreateAccountRequest, db: Session = Depends(
         hashed_password=auth.hash_password(payload.password),
     )
     db.add(new_user)
+    db.flush()  # assigns the primary key used to build the display id
+    assign_display_id(db, new_user)
     db.commit()
     db.refresh(new_user)
 

@@ -41,6 +41,33 @@ def utcnow() -> datetime:
 
 
 # ---------------------------------------------------------------------------
+# Roles
+# ---------------------------------------------------------------------------
+
+ROLE_USER = "user"
+ROLE_USER_ADMIN = "user_admin"
+ROLE_PLATFORM_MANAGER = "platform_manager"
+
+ROLES = (ROLE_USER, ROLE_USER_ADMIN, ROLE_PLATFORM_MANAGER)
+
+# Labels used by the admin website's User Type column and filters.
+ROLE_LABELS = {
+    ROLE_USER: "User",
+    ROLE_USER_ADMIN: "User Admin",
+    ROLE_PLATFORM_MANAGER: "Platform Manager",
+}
+
+# Display-id prefix per role, so an id communicates the account kind at a
+# glance in the admin tables.
+ROLE_ID_PREFIX = {
+    ROLE_USER: "U",
+    ROLE_USER_ADMIN: "A",
+    ROLE_PLATFORM_MANAGER: "M",
+}
+
+
+
+# ---------------------------------------------------------------------------
 # Users and profile
 # ---------------------------------------------------------------------------
 
@@ -56,7 +83,15 @@ class User(Base):
 
     # Administrative state (supports the suspend/reactivate admin functions).
     is_active = Column(Boolean, nullable=False, default=True)
-    is_admin = Column(Boolean, nullable=False, default=False)
+
+    # Role rather than a boolean: the admin website distinguishes User Admins
+    # from Platform Managers, and they have different permissions. See ROLES.
+    role = Column(String, nullable=False, default="user", index=True)
+
+    # Human-readable identifier shown in the admin tables (U001, U020).
+    # Sequential integer ids leak how many accounts exist and read poorly in a
+    # UI, so a display id is generated at signup and kept alongside.
+    display_id = Column(String, unique=True, index=True, nullable=True)
 
     created_at = Column(DateTime(timezone=True), default=utcnow)
 
@@ -71,6 +106,21 @@ class User(Base):
     recommendations = relationship(
         "RecommendationHistory", back_populates="user", cascade="all, delete-orphan"
     )
+    support_requests = relationship(
+        "SupportRequest",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        foreign_keys="SupportRequest.user_id",
+    )
+
+    @property
+    def is_admin(self) -> bool:
+        """Any staff role. Kept so existing checks read naturally."""
+        return self.role in (ROLE_USER_ADMIN, ROLE_PLATFORM_MANAGER)
+
+    @property
+    def full_name(self) -> str:
+        return f"{self.first_name} {self.last_name}".strip()
 
 
 class UserProfile(Base):
@@ -339,4 +389,60 @@ class RecommendationHistory(Base):
 
     __table_args__ = (
         Index("ix_reco_user_date", "user_id", "log_date"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Support requests
+# ---------------------------------------------------------------------------
+
+REQUEST_CATEGORIES = (
+    "password_change",
+    "subscription",
+    "account_recovery",
+    "bug_report",
+    "other",
+)
+
+REQUEST_STATUSES = ("unresolved", "resolved")
+
+
+class SupportRequest(Base):
+    """
+    A support ticket raised by an app user and handled by a User Admin.
+
+    Replies live on the request rather than in a separate messages table: the
+    admin interface shows one admin response per request, and modelling a full
+    threaded conversation would add joins for a capability the UI does not
+    offer.
+    """
+
+    __tablename__ = "support_requests"
+
+    id = Column(Integer, primary_key=True, index=True)
+    display_id = Column(String, unique=True, index=True, nullable=True)
+
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+
+    category = Column(String, nullable=False, default="other")
+    subject = Column(String, nullable=False)
+    body = Column(Text, nullable=False)
+
+    status = Column(String, nullable=False, default="unresolved", index=True)
+
+    # Admin response.
+    reply = Column(Text, nullable=True)
+    replied_at = Column(DateTime(timezone=True), nullable=True)
+    resolved_at = Column(DateTime(timezone=True), nullable=True)
+    handled_by_id = Column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+
+    created_at = Column(DateTime(timezone=True), default=utcnow, index=True)
+
+    user = relationship("User", back_populates="support_requests", foreign_keys=[user_id])
+    handled_by = relationship("User", foreign_keys=[handled_by_id])
+
+    __table_args__ = (
+        Index("ix_support_status_created", "status", "created_at"),
     )

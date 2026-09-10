@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from . import models
 from .database import engine
-from .routers import auth_routes, logs, profile, recommendation
+from .routers import admin, auth_routes, logs, profile, recommendation, support
 
 # Creates tables if they don't exist. Adequate for the project; a schema change
 # to an existing table still needs a migration (Alembic) since create_all only
@@ -55,6 +55,9 @@ app.include_router(auth_routes.router)
 app.include_router(profile.router)
 app.include_router(logs.router)
 app.include_router(recommendation.router)
+app.include_router(admin.router)
+app.include_router(support.user_router)
+app.include_router(support.admin_router)
 
 
 @app.get("/health", tags=["meta"])

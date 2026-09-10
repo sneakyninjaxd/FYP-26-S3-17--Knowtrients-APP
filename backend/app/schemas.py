@@ -45,6 +45,9 @@ class UserResponse(BaseModel):
     first_name: str
     last_name: str
     onboarding_complete: bool = False
+    # The admin website checks this to reject ordinary app users at login.
+    role: str = "user"
+    display_id: str | None = None
 
     class Config:
         from_attributes = True
@@ -292,3 +295,125 @@ class DailySummary(BaseModel):
     sleep_hours: float | None = None
     activity_minutes: float = 0
     entry_count: int = 0
+
+
+# ---------------------------------------------------------------------------
+# Admin — accounts
+# ---------------------------------------------------------------------------
+
+
+class AdminAccountRow(BaseModel):
+    """One row in the admin Accounts table."""
+
+    id: int
+    display_id: str | None = None
+    first_name: str
+    last_name: str
+    email: EmailStr
+    user_type: str          # "User" | "User Admin" | "Platform Manager"
+    status: str             # "Active" | "Suspended"
+    created_at: datetime | None = None
+
+
+class AdminAccountDetail(AdminAccountRow):
+    """The View Account page: profile summary and recent activity counts."""
+
+    age: float | None = None
+    bmi: float | None = None
+    gender: str | None = None
+    height_cm: float | None = None
+    weight_kg: float | None = None
+    activity_level: str | None = None
+    goals: list[str] = []
+    dietary_preferences: list[str] = []
+    onboarding_complete: bool = False
+
+    food_log_count: int = 0
+    recommendation_count: int = 0
+    last_active: datetime | None = None
+    open_request_count: int = 0
+
+
+class StatusUpdate(BaseModel):
+    """Suspend or reactivate an account."""
+
+    is_active: bool
+    reason: str | None = None
+
+
+class RoleUpdate(BaseModel):
+    role: str
+
+    @field_validator("role")
+    @classmethod
+    def known_role(cls, v):
+        from .models import ROLES
+
+        if v not in ROLES:
+            raise ValueError(f"role must be one of: {', '.join(ROLES)}")
+        return v
+
+
+class AdminDashboard(BaseModel):
+    """Counts for the admin dashboard tiles."""
+
+    total_users: int = 0
+    active_users: int = 0
+    suspended_users: int = 0
+    user_admins: int = 0
+    platform_managers: int = 0
+    new_users_7d: int = 0
+    unresolved_requests: int = 0
+    resolved_requests: int = 0
+    logs_today: int = 0
+    recommendations_today: int = 0
+
+
+# ---------------------------------------------------------------------------
+# Support requests
+# ---------------------------------------------------------------------------
+
+
+class SupportRequestCreate(BaseModel):
+    """Raised from the mobile app."""
+
+    category: str = "other"
+    subject: str = Field(min_length=3, max_length=200)
+    body: str = Field(min_length=3, max_length=5000)
+
+    @field_validator("category")
+    @classmethod
+    def known_category(cls, v):
+        from .models import REQUEST_CATEGORIES
+
+        if v not in REQUEST_CATEGORIES:
+            raise ValueError(f"category must be one of: {', '.join(REQUEST_CATEGORIES)}")
+        return v
+
+
+class SupportRequestReply(BaseModel):
+    body: str = Field(min_length=1, max_length=5000)
+    resolve: bool = True
+
+
+class SupportRequestResponse(BaseModel):
+    id: int
+    display_id: str | None = None
+    category: str
+    subject: str
+    body: str
+    status: str
+    reply: str | None = None
+    created_at: datetime | None = None
+    replied_at: datetime | None = None
+    resolved_at: datetime | None = None
+
+    # Denormalised for the admin list, which shows who raised each request.
+    user_id: int
+    user_display_id: str | None = None
+    user_name: str | None = None
+    user_email: str | None = None
+    handled_by_name: str | None = None
+
+    class Config:
+        from_attributes = True

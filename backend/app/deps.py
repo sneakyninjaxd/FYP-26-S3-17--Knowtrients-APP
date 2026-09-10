@@ -36,7 +36,21 @@ def get_current_user(
 def get_current_admin(
     current_user: models.User = Depends(get_current_user),
 ) -> models.User:
-    """Restricts a route to administrator accounts."""
+    """Restricts a route to staff accounts (User Admin or Platform Manager)."""
     if not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Administrator access required")
+    return current_user
+
+
+def get_current_platform_manager(
+    current_user: models.User = Depends(get_current_user),
+) -> models.User:
+    """
+    Restricts a route to Platform Managers.
+
+    Used for actions a User Admin should not be able to take on their own:
+    changing roles, deleting accounts, and managing other staff.
+    """
+    if current_user.role != models.ROLE_PLATFORM_MANAGER:
+        raise HTTPException(status_code=403, detail="Platform Manager access required")
     return current_user
