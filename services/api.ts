@@ -13,6 +13,9 @@ export type ApiUser = {
   email: string;
   first_name: string;
   last_name: string;
+  onboarding_complete: boolean;
+  role: string;
+  display_id: string | null;
 };
 
 export type AuthResponse = {
@@ -20,6 +23,27 @@ export type AuthResponse = {
   token_type: string;
   user: ApiUser;
 };
+
+export type ProfileResponse = {
+  date_of_birth: string | null;
+  gender: string | null;
+  height_cm: number | null;
+  weight_kg: number | null;
+  health_conditions: string[];
+  other_condition: string | null;
+  goals: string[];
+  other_goal: string | null;
+  target_weight_kg: number | null;
+  activity_level: string | null;
+  dietary_preferences: string[];
+  other_preference: string | null;
+  onboarding_complete: boolean;
+  age: number | null;
+  bmi: number | null;
+};
+
+/** age and bmi are derived server-side, so they're never sent. */
+export type ProfileUpsert = Omit<ProfileResponse, 'age' | 'bmi'>;
 
 export class ApiError extends Error {
   status: number;
@@ -71,6 +95,11 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   return body as T;
 }
 
+/** Every authenticated call needs the same header; this keeps it in one place. */
+function authHeaders(token: string) {
+  return { Authorization: `Bearer ${token}` };
+}
+
 export const api = {
   signUp: (data: {
     email: string;
@@ -92,6 +121,23 @@ export const api = {
 
   getMe: (token: string) =>
     request<ApiUser>('/me', {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: authHeaders(token),
+    }),
+
+  // -------------------------------------------------------------------------
+  // Profile
+  // -------------------------------------------------------------------------
+
+  getProfile: (token: string) =>
+    request<ProfileResponse>('/profile', {
+      headers: authHeaders(token),
+    }),
+
+  /** Partial update — omitted fields are left untouched by the backend. */
+  updateProfile: (token: string, data: Partial<ProfileUpsert>) =>
+    request<ProfileResponse>('/profile', {
+      method: 'PUT',
+      headers: authHeaders(token),
+      body: JSON.stringify(data),
     }),
 };

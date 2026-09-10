@@ -3,11 +3,11 @@ import { ACTIVITY_LEVELS, DIETARY, labelFor } from '@/src/profile-options';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import {
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -34,8 +34,8 @@ export default function MyLifestyle() {
 
         <View style={styles.levelBox}>
           <Text style={styles.levelText}>
-            {profile.activityLevel
-              ? labelFor(ACTIVITY_LEVELS, profile.activityLevel)
+            {profile.activity_level
+              ? labelFor(ACTIVITY_LEVELS, profile.activity_level)
               : 'Not set'}
           </Text>
         </View>
@@ -43,21 +43,21 @@ export default function MyLifestyle() {
         <Text style={styles.sectionLabel}>Dietary Preference</Text>
 
         <View style={styles.chipWrap}>
-          {profile.dietaryPreferences.length === 0 && (
+          {profile.dietary_preferences.length === 0 && (
             <Text style={styles.empty}>None selected</Text>
           )}
 
-          {profile.dietaryPreferences.map((id) => (
+          {profile.dietary_preferences.map((id) => (
             <View key={id} style={styles.chip}>
               <Text style={styles.chipText}>{labelFor(DIETARY, id)}</Text>
             </View>
           ))}
         </View>
 
-        {profile.dietaryPreferences.includes('other') && (
+        {profile.dietary_preferences.includes('other') && (
           <View style={styles.otherBox}>
             <Text style={styles.otherText}>
-              {profile.otherDietary || 'No description added'}
+              {profile.other_preference || 'No description added'}
             </Text>
           </View>
         )}

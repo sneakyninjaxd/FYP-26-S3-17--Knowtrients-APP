@@ -1,6 +1,6 @@
+import { api, ApiError, type ApiUser, type AuthResponse } from '@/services/api';
+import { clearToken, getToken, saveToken } from '@/services/auth-storage';
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import { api, ApiError, type ApiUser } from '@/services/api';
-import { saveToken, getToken, clearToken } from '@/services/auth-storage';
 
 type AuthContextValue = {
   user: ApiUser | null;
@@ -12,11 +12,10 @@ type AuthContextValue = {
     lastName: string;
     password: string;
     retypePassword: string;
-  }) => Promise<void>;
-  logIn: (data: { email: string; password: string }) => Promise<void>;
+  }) => Promise<AuthResponse>;
+  logIn: (data: { email: string; password: string }) => Promise<AuthResponse>;
   logOut: () => Promise<void>;
 };
-
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -44,7 +43,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     })();
   }, []);
-
   async function signUp(data: {
     email: string;
     firstName: string;
@@ -62,6 +60,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await saveToken(result.access_token);
     setToken(result.access_token);
     setUser(result.user);
+    return result;
   }
 
   async function logIn(data: { email: string; password: string }) {
@@ -69,6 +68,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await saveToken(result.access_token);
     setToken(result.access_token);
     setUser(result.user);
+    return result;
   }
 
   async function logOut() {
@@ -91,3 +91,4 @@ export function useAuth(): AuthContextValue {
 }
 
 export { ApiError };
+

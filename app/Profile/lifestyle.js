@@ -1,6 +1,5 @@
 import { useProfile } from '@/contexts/profile-context';
 import { ACTIVITY_LEVELS, DIETARY } from '@/src/profile-options';
-import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import {
@@ -13,7 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-export default function EditLifestyle() {
+export default function Lifestyle() {
   const { profile, updateProfile } = useProfile();
 
   const [activityLevel, setActivityLevel] = useState(profile.activity_level);
@@ -34,7 +33,7 @@ export default function EditLifestyle() {
     });
   };
 
-  const handleSave = async () => {
+  const handleContinue = async () => {
     setSaving(true);
     await updateProfile({
       activity_level: activityLevel,
@@ -42,41 +41,58 @@ export default function EditLifestyle() {
       other_preference: dietary.includes('other') ? otherPreference : null,
     });
     setSaving(false);
-    router.back();
+    router.push('/Profile/finish');
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scroll}>
+      <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
 
-        <View style={styles.header}>
+        <View style={styles.logoContainer}>
           <Text style={styles.logo}>✦ Knowtrients</Text>
-          <TouchableOpacity onPress={() => router.push('/account/account')}>
-            <Ionicons name="person-circle" size={32} color="#48DDB0" />
-          </TouchableOpacity>
+          <Text style={styles.tagline}>Know your nutrients, Know your health</Text>
         </View>
 
-        <Text style={styles.title}>Edit My Lifestyle</Text>
-        <Text style={styles.subtitle}>
-          Let Knowtrients give you recommendations that suits your lifestyle
+        {/* Progress bar */}
+        <View style={styles.progressRow}>
+          <View style={styles.step}>
+            <Text style={styles.inactiveStep}>Step 1: You</Text>
+            <View style={styles.inactiveLine} />
+          </View>
+
+          <View style={styles.step}>
+            <Text style={styles.inactiveStep}>Step 2: Your Goals</Text>
+            <View style={styles.inactiveLine} />
+          </View>
+
+          <View style={styles.step}>
+            <Text style={styles.activeStep}>Step 3: Your Lifestyle</Text>
+            <View style={styles.activeLine} />
+          </View>
+        </View>
+
+        <Text style={styles.title}>Let us know about your Lifestyle</Text>
+        <Text style={styles.description}>
+          Let Knowtrients understand you better to give you recommendations that
+          fits your lifestyle
         </Text>
 
         {/* Activity level — single select */}
         <Text style={styles.label}>Activity Level</Text>
         <Text style={styles.helper}>How active are you? Select one.</Text>
 
-        <View style={styles.levelList}>
+        <View style={styles.activityContainer}>
           {ACTIVITY_LEVELS.map((level) => {
             const selected = activityLevel === level.id;
             return (
               <TouchableOpacity
                 key={level.id}
                 onPress={() => setActivityLevel(level.id)}
-                style={selected ? styles.levelSelected : styles.levelBox}
+                style={selected ? styles.selectedActivity : styles.activityButton}
               >
-                <Text style={styles.levelTitle}>{level.label}</Text>
+                <Text style={styles.activityTitle}>{level.label}</Text>
                 {level.description !== '' && (
-                  <Text style={styles.levelDescription}>{level.description}</Text>
+                  <Text style={styles.activityDescription}>{level.description}</Text>
                 )}
               </TouchableOpacity>
             );
@@ -91,16 +107,18 @@ export default function EditLifestyle() {
         </Text>
 
         <View style={styles.chipWrap}>
-          {DIETARY.map((d) => {
-            const selected = dietary.includes(d.id);
+          {DIETARY.map((item) => {
+            const selected = dietary.includes(item.id);
             return (
               <TouchableOpacity
-                key={d.id}
-                onPress={() => toggleDietary(d.id)}
+                key={item.id}
+                onPress={() => toggleDietary(item.id)}
                 style={selected ? styles.chipSelected : styles.chip}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: selected }}
               >
                 <Text style={selected ? styles.chipTextSelected : styles.chipText}>
-                  {d.label}
+                  {item.label}
                 </Text>
               </TouchableOpacity>
             );
@@ -117,17 +135,23 @@ export default function EditLifestyle() {
           />
         )}
 
+        {/* Buttons */}
         <View style={styles.buttonRow}>
-          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => router.push('/Profile/goal')}
+          >
             <Text style={styles.backText}>← Back</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.saveButton}
-            onPress={handleSave}
+            style={styles.continueButton}
+            onPress={handleContinue}
             disabled={saving}
           >
-            <Text style={styles.saveText}>{saving ? 'Saving...' : 'Save'}</Text>
+            <Text style={styles.continueText}>
+              {saving ? 'Saving...' : 'Continue →'}
+            </Text>
           </TouchableOpacity>
         </View>
 
@@ -138,27 +162,39 @@ export default function EditLifestyle() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#020D09' },
-  scroll: { paddingBottom: 30, flexGrow: 1 },
 
-  header: {
+  logoContainer: { paddingLeft: 25, paddingTop: 30, marginBottom: 30 },
+  logo: { color: '#fff', fontSize: 20, fontFamily: 'serif' },
+  tagline: { color: '#fff', fontSize: 12, marginTop: 3 },
+
+  progressRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 6,
     paddingHorizontal: 25,
-    paddingVertical: 20,
+    marginBottom: 30,
   },
 
-  logo: { color: '#fff', fontSize: 20, fontFamily: 'serif' },
+  step: { flex: 1 },
+  activeStep: { color: '#48DDB0', fontSize: 10, marginBottom: 5 },
+  inactiveStep: { color: '#17644E', fontSize: 10, marginBottom: 5 },
+  activeLine: { height: 3, backgroundColor: '#48DDB0', borderRadius: 5 },
+  inactiveLine: { height: 3, backgroundColor: '#123B2F', borderRadius: 5 },
 
-  title: { color: '#fff', fontSize: 30, fontFamily: 'serif', paddingHorizontal: 25 },
-
-  subtitle: {
-    color: '#3AA889',
-    fontSize: 11,
-    lineHeight: 15,
+  title: {
+    color: '#FFFFFF',
+    fontSize: 34,
+    fontFamily: 'serif',
+    fontWeight: 'bold',
     paddingHorizontal: 25,
-    marginTop: 6,
-    marginBottom: 16,
+    marginBottom: 5,
+  },
+
+  description: {
+    color: '#3AA889',
+    fontSize: 13,
+    lineHeight: 17,
+    paddingHorizontal: 25,
+    marginBottom: 20,
   },
 
   label: {
@@ -177,30 +213,37 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
 
-  levelList: { gap: 8, paddingHorizontal: 25 },
+  activityContainer: { gap: 8, paddingHorizontal: 25 },
 
-  levelBox: {
+  activityButton: {
     backgroundColor: '#07140F',
     borderWidth: 1,
     borderColor: '#123B2F',
     borderRadius: 12,
-    paddingVertical: 8,
+    minHeight: 35,
+    paddingVertical: 6,
     paddingHorizontal: 15,
   },
 
-  levelSelected: {
+  selectedActivity: {
     backgroundColor: '#07140F',
     borderWidth: 1,
     borderColor: '#48DDB0',
     borderRadius: 12,
-    paddingVertical: 8,
+    minHeight: 35,
+    paddingVertical: 6,
     paddingHorizontal: 15,
   },
 
-  levelTitle: { color: '#48DDB0', fontSize: 12, fontWeight: '500' },
-  levelDescription: { color: '#60766E', fontSize: 10, marginTop: 2 },
+  activityTitle: { color: '#48DDB0', fontSize: 12, fontWeight: '500' },
+  activityDescription: { color: '#60766E', fontSize: 10, marginTop: 2 },
 
-  chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 25 },
+  chipWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    paddingHorizontal: 25,
+  },
 
   chip: {
     backgroundColor: '#102A21',
@@ -234,30 +277,31 @@ const styles = StyleSheet.create({
 
   buttonRow: {
     flexDirection: 'row',
-    gap: 12,
-    paddingHorizontal: 25,
-    marginTop: 'auto',
-    paddingTop: 30,
+    gap: 20,
+    justifyContent: 'center',
+    marginTop: 45,
   },
 
   backButton: {
-    flex: 1,
     borderWidth: 1,
     borderColor: '#48DDB0',
-    borderRadius: 8,
-    paddingVertical: 13,
+    width: 143,
+    height: 42,
+    borderRadius: 7,
+    justifyContent: 'center',
     alignItems: 'center',
   },
 
-  backText: { color: '#fff', fontSize: 13 },
+  backText: { color: '#fff', fontSize: 14, fontWeight: '600' },
 
-  saveButton: {
-    flex: 1,
-    backgroundColor: '#4ECBA0',
-    borderRadius: 8,
-    paddingVertical: 13,
+  continueButton: {
+    backgroundColor: '#48DDB0',
+    width: 143,
+    height: 42,
+    borderRadius: 7,
+    justifyContent: 'center',
     alignItems: 'center',
   },
 
-  saveText: { color: '#00382B', fontSize: 13, fontWeight: '600' },
+  continueText: { color: '#00382B', fontSize: 14, fontWeight: '600' },
 });

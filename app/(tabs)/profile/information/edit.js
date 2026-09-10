@@ -4,26 +4,27 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import {
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function EditInformation() {
   const { profile, updateProfile } = useProfile();
 
-  const [dateOfBirth, setDateOfBirth] = useState(profile.dateOfBirth ?? '');
+  const [dateOfBirth, setDateOfBirth] = useState(profile.date_of_birth ?? '');
   const [gender, setGender] = useState(profile.gender);
-  const [country, setCountry] = useState(profile.country ?? '');
-  const [height, setHeight] = useState(profile.heightCm?.toString() ?? '');
-  const [weight, setWeight] = useState(profile.weightKg?.toString() ?? '');
-  const [conditions, setConditions] = useState(profile.conditions);
-  const [otherCondition, setOtherCondition] = useState(profile.otherCondition);
+  const [height, setHeight] = useState(profile.height_cm?.toString() ?? '');
+  const [weight, setWeight] = useState(profile.weight_kg?.toString() ?? '');
+  const [conditions, setConditions] = useState(profile.health_conditions ?? []);
+  const [otherCondition, setOtherCondition] = useState(profile.other_condition ?? '');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
 
   const toggleCondition = (id) => {
     setConditions((prev) => {
@@ -34,16 +35,25 @@ export default function EditInformation() {
     });
   };
 
-  const handleSave = () => {
-    updateProfile({
-      dateOfBirth: dateOfBirth || null,
+  const handleSave = async () => {
+    if (dateOfBirth && !/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth)) {
+      setError('Date of birth must be YYYY-MM-DD, e.g. 2000-10-25');
+      return;
+    }
+
+    setError(null);
+    setSaving(true);
+
+    await updateProfile({
+      date_of_birth: dateOfBirth || null,
       gender,
-      country: country || null,
-      heightCm: height ? Number(height) : null,
-      weightKg: weight ? Number(weight) : null,
-      conditions,
-      otherCondition: conditions.includes('other') ? otherCondition : '',
+      height_cm: height ? Number(height) : null,
+      weight_kg: weight ? Number(weight) : null,
+      health_conditions: conditions,
+      other_condition: conditions.includes('other') ? otherCondition : null,
     });
+
+    setSaving(false);
     router.back();
   };
 
@@ -62,6 +72,8 @@ export default function EditInformation() {
         <Text style={styles.subtitle}>
           Your measurements helps Knowtrients give recommendations more accurately
         </Text>
+
+        {error && <Text style={styles.errorText}>{error}</Text>}
 
         {/* Date of birth */}
         <Text style={styles.label}>Date of Birth:</Text>
@@ -96,22 +108,6 @@ export default function EditInformation() {
             );
           })}
         </View>
-
-        {/* Country */}
-        <View style={styles.countryRow}>
-          <Text style={styles.inlineLabel}>Country:</Text>
-          <TextInput
-            style={styles.countryInput}
-            placeholder="Select Country"
-            placeholderTextColor="#60766E"
-            value={country}
-            onChangeText={setCountry}
-          />
-        </View>
-
-        <Text style={styles.helper}>
-          Knowing your country allows Knowtrients to recommend local dishes to you.
-        </Text>
 
         {/* Height + weight */}
         <View style={styles.row}>
@@ -189,8 +185,12 @@ export default function EditInformation() {
             <Text style={styles.backText}>← Back</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-            <Text style={styles.saveText}>Save</Text>
+          <TouchableOpacity
+            style={styles.saveButton}
+            onPress={handleSave}
+            disabled={saving}
+          >
+            <Text style={styles.saveText}>{saving ? 'Saving...' : 'Save'}</Text>
           </TouchableOpacity>
         </View>
 
@@ -229,6 +229,13 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
 
+  errorText: {
+    color: '#E05555',
+    fontSize: 11,
+    paddingHorizontal: 25,
+    marginBottom: 8,
+  },
+
   label: {
     color: '#D4E6DF',
     fontSize: 11,
@@ -259,6 +266,7 @@ const styles = StyleSheet.create({
     gap: 16,
     paddingHorizontal: 25,
     marginTop: 16,
+    marginBottom: 8,
   },
 
   radioRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
@@ -278,24 +286,6 @@ const styles = StyleSheet.create({
   dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#48DDB0' },
 
   radioText: { color: '#D4E6DF', fontSize: 11 },
-
-  countryRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 25,
-    marginTop: 16,
-  },
-
-  countryInput: {
-    backgroundColor: '#0A1A14',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    height: 38,
-    width: 160,
-    color: '#fff',
-    fontSize: 12,
-  },
 
   helper: {
     color: '#60766E',

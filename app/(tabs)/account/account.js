@@ -1,3 +1,4 @@
+import { useAuth } from '@/contexts/auth-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useState } from 'react';
@@ -28,6 +29,7 @@ const BUG_AREAS = [
 ];
 
 export default function Account() {
+  const { logOut } = useAuth();
   const [showDelete, setShowDelete] = useState(false);
   const [reasons, setReasons] = useState([]);
   const [otherReason, setOtherReason] = useState('');
@@ -93,12 +95,9 @@ export default function Account() {
         </TouchableOpacity>
 
         {/* might need to end session and log out user after deleting account */}
-        <TouchableOpacity
-          style={styles.activityBox3}
-          onPress={() => router.push('/login')}
-        >
-          <Text style={styles.activity3}>Log out</Text>
-        </TouchableOpacity>
+<TouchableOpacity style={styles.activityBox3} onPress={logOut}>
+  <Text style={styles.activity3}>Log out</Text>
+</TouchableOpacity>
 
       </ScrollView>
 

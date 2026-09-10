@@ -1,18 +1,18 @@
+import { brand } from '@/constants/brand';
+import { ApiError, useAuth } from '@/contexts/auth-context';
+import { Link, router } from 'expo-router';
 import { useState } from 'react';
 import {
-  View,
-  Text,
-  TextInput,
-  Pressable,
-  StyleSheet,
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from 'react-native';
-import { Link, router } from 'expo-router';
-import { useAuth, ApiError } from '@/contexts/auth-context';
-import { brand } from '@/constants/brand';
 
 export default function LoginScreen() {
   const { logIn } = useAuth();
@@ -31,8 +31,8 @@ export default function LoginScreen() {
 
     setIsSubmitting(true);
     try {
-      await logIn({ email, password });
-      router.replace('/(tabs)');
+      const result = await logIn({ email, password });
+      router.replace(result.user.onboarding_complete ? '/(tabs)' : '/Profile/you');
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
     } finally {

@@ -43,7 +43,7 @@ export default function SignupScreen() {
     setIsSubmitting(true);
     try {
       await signUp({ email, firstName, lastName, password, retypePassword });
-      router.replace('/(tabs)');
+      router.replace('/Profile/profile(you)');
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
     } finally {

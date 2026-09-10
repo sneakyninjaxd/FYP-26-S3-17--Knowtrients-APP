@@ -1,9 +1,29 @@
-fastapi
-uvicorn[standard]
-sqlalchemy
-psycopg2-binary
-python-dotenv
-passlib
+# Versions are pinned as required by dependency D-04, so an upstream release
+# cannot change the behaviour of a build between now and assessment.
+
+# Web framework
+fastapi==0.141.1
+uvicorn[standard]==0.52.4
+pydantic[email]==2.13.5
+# Required for form-encoded parsing on /token (the Swagger Authorize flow).
+python-multipart==0.0.20
+
+# Database
+SQLAlchemy==2.0.52
+psycopg2-binary==2.9.10
+
+# Auth
+passlib==1.7.4
 bcrypt==4.0.1
-python-jose[cryptography]
-pydantic[email]
+python-jose[cryptography]==3.5.0
+
+# Config
+python-dotenv==1.2.2
+
+# Machine learning and explainability
+xgboost==3.4.1
+shap==0.52.0
+scikit-learn==1.8.0
+pandas==3.0.2
+numpy==2.4.4
+joblib==1.5.3

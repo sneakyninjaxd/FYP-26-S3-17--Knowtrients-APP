@@ -3,11 +3,11 @@ import { GOALS, labelFor } from '@/src/profile-options';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import {
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -47,13 +47,15 @@ export default function MyGoals() {
         {profile.goals.includes('other') && (
           <View style={styles.otherBox}>
             <Text style={styles.otherText}>
-              {profile.otherGoal || 'No description added'}
+              {profile.other_goal || 'No description added'}
             </Text>
           </View>
         )}
 
-        <Text style={styles.sectionLabel}>Timeline</Text>
-        <Text style={styles.value}>{profile.timeline ?? '—'}</Text>
+        <Text style={styles.sectionLabel}>Target Weight</Text>
+        <Text style={styles.value}>
+          {profile.target_weight_kg ? `${profile.target_weight_kg} kg` : '—'}
+        </Text>
 
         <View style={styles.buttonRow}>
           <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>

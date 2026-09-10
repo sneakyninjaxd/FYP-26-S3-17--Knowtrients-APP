@@ -1,40 +1,84 @@
-import { createContext, useContext, useState } from 'react';
+import { useAuth } from '@/contexts/auth-context';
+import { api } from '@/services/api';
+import { createContext, useContext, useEffect, useState } from 'react';
 
 const ProfileContext = createContext(null);
 
 const EMPTY_PROFILE = {
-  plan: 'free',              // 'free' | 'premium'
-  firstName: '',
-  lastName: '',
-  dateOfBirth: null,        // '2000-10-10'
-  gender: null,             // 'male' | 'female'
-  country: null,            // 'SG'
-  heightCm: null,           // number
-  weightKg: null,           // number
-  conditions: [],           // ['type1_diabetes']
-  otherCondition: '',
+  // Not a backend field — subscription isn't in their schema yet.
+  plan: 'free',
 
-  goals: [],                // ['gain_weight']
-  otherGoal: '',
-  timeline: null,           // '1_month'
-  currentWeightKg: null,
-  targetWeightKg: null,
+  date_of_birth: null,
+  gender: null,
+  height_cm: null,
+  weight_kg: null,
+  health_conditions: [],
+  other_condition: '',
 
-  activityLevel: null,      // 'sedentary'
-  dietaryPreferences: [],   // ['halal']
-  otherDietary: '',
+  goals: [],
+  other_goal: '',
+  target_weight_kg: null,
+
+  activity_level: null,
+  dietary_preferences: [],
+  other_preference: '',
+
+  onboarding_complete: false,
+
+  // Computed server-side from date_of_birth, height_cm and weight_kg.
+  age: null,
+  bmi: null,
 };
 
 export function ProfileProvider({ children }) {
-  const [profile, setProfile] = useState(EMPTY_PROFILE);
+  const { token } = useAuth();
 
-  // merge a partial update — each form saves only its own fields
-  const updateProfile = (changes) => {
+  const [profile, setProfile] = useState(EMPTY_PROFILE);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Load whenever a token appears — on login, or when a saved session restores.
+  useEffect(() => {
+    if (!token) {
+      setProfile(EMPTY_PROFILE);
+      return;
+    }
+
+    (async () => {
+      setIsLoading(true);
+      try {
+        const data = await api.getProfile(token);
+        setProfile((prev) => ({ ...EMPTY_PROFILE, ...data, plan: prev.plan }));
+      } catch (err) {
+        console.warn('Could not load profile', err);
+      } finally {
+        setIsLoading(false);
+      }
+    })();
+  }, [token]);
+
+  /**
+   * Saves a partial update. The screen sees the change immediately, then the
+   * server's response replaces it — which brings back computed age and bmi.
+   */
+  const updateProfile = async (changes) => {
     setProfile((prev) => ({ ...prev, ...changes }));
+
+    if (!token) return;
+
+    // `plan` is local-only; sending it would be rejected by the schema.
+    const { plan, ...payload } = changes;
+    if (Object.keys(payload).length === 0) return;
+
+    try {
+      const data = await api.updateProfile(token, payload);
+      setProfile((prev) => ({ ...prev, ...data }));
+    } catch (err) {
+      console.warn('Could not save profile', err);
+    }
   };
 
   return (
-    <ProfileContext.Provider value={{ profile, updateProfile }}>
+    <ProfileContext.Provider value={{ profile, updateProfile, isLoading }}>
       {children}
     </ProfileContext.Provider>
   );

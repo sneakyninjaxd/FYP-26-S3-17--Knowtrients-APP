@@ -1,13 +1,14 @@
+import { useAuth } from '@/contexts/auth-context';
 import { useProfile } from '@/contexts/profile-context';
 import { CONDITIONS, GENDERS, labelFor } from '@/src/profile-options';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import {
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -22,6 +23,7 @@ function Field({ label, value }) {
 
 export default function MyInformation() {
   const { profile } = useProfile();
+  const { user } = useAuth();
 
   return (
     <SafeAreaView style={styles.container}>
@@ -40,32 +42,37 @@ export default function MyInformation() {
           recommendations.
         </Text>
 
-        <Field label="First Name:" value={profile.firstName} />
-        <Field label="Last Name:" value={profile.lastName} />
-        <Field label="Date of Birth:" value={profile.dateOfBirth} />
+        <Field label="First Name:" value={user?.first_name} />
+        <Field label="Last Name:" value={user?.last_name} />
+        <Field label="Date of Birth:" value={profile.date_of_birth} />
         <Field label="Gender:" value={labelFor(GENDERS, profile.gender)} />
-        <Field label="Country:" value={profile.country} />
-        <Field label="Height (cm):" value={profile.heightCm && `${profile.heightCm} cm`} />
-        <Field label="Weight (kg):" value={profile.weightKg && `${profile.weightKg} kg`} />
+        <Field
+          label="Height (cm):"
+          value={profile.height_cm && `${profile.height_cm} cm`}
+        />
+        <Field
+          label="Weight (kg):"
+          value={profile.weight_kg && `${profile.weight_kg} kg`}
+        />
 
         <Text style={styles.sectionLabel}>Medical Conditions</Text>
 
         <View style={styles.chipWrap}>
-          {profile.conditions.length === 0 && (
+          {profile.health_conditions.length === 0 && (
             <Text style={styles.empty}>None selected</Text>
           )}
 
-          {profile.conditions.map((id) => (
+          {profile.health_conditions.map((id) => (
             <View key={id} style={styles.chip}>
               <Text style={styles.chipText}>{labelFor(CONDITIONS, id)}</Text>
             </View>
           ))}
         </View>
 
-        {profile.conditions.includes('other') && (
+        {profile.health_conditions.includes('other') && (
           <View style={styles.otherBox}>
             <Text style={styles.otherText}>
-              {profile.otherCondition || 'Describe your condition(s)...'}
+              {profile.other_condition || 'Describe your condition(s)...'}
             </Text>
           </View>
         )}

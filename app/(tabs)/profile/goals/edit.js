@@ -4,24 +4,24 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import {
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-
-const TIMELINES = ['1 Month', '3 Months', '6 Months', '1 Year'];
 
 export default function EditGoals() {
   const { profile, updateProfile } = useProfile();
 
-  const [goals, setGoals] = useState(profile.goals);
-  const [otherGoal, setOtherGoal] = useState(profile.otherGoal);
-  const [timeline, setTimeline] = useState(profile.timeline);
-  const [showTimelines, setShowTimelines] = useState(false);
+  const [goals, setGoals] = useState(profile.goals ?? []);
+  const [otherGoal, setOtherGoal] = useState(profile.other_goal ?? '');
+  const [targetWeight, setTargetWeight] = useState(
+    profile.target_weight_kg?.toString() ?? ''
+  );
+  const [saving, setSaving] = useState(false);
 
   const toggleGoal = (id) => {
     setGoals((prev) =>
@@ -29,12 +29,14 @@ export default function EditGoals() {
     );
   };
 
-  const handleSave = () => {
-    updateProfile({
+  const handleSave = async () => {
+    setSaving(true);
+    await updateProfile({
       goals,
-      otherGoal: goals.includes('other') ? otherGoal : '',
-      timeline,
+      other_goal: goals.includes('other') ? otherGoal : null,
+      target_weight_kg: targetWeight ? Number(targetWeight) : null,
     });
+    setSaving(false);
     router.back();
   };
 
@@ -88,44 +90,31 @@ export default function EditGoals() {
           />
         )}
 
-        <Text style={styles.label}>Timeline</Text>
-        <Text style={styles.helper}>
-          How fast would you like to achieve these goals?
-        </Text>
+        <Text style={styles.label}>Target Weight (kg)</Text>
 
-        <TouchableOpacity
-          style={styles.dropdown}
-          onPress={() => setShowTimelines(!showTimelines)}
-        >
-          <Text style={timeline ? styles.dropdownValue : styles.dropdownPlaceholder}>
-            {timeline ?? 'Select a Timeline'}
-          </Text>
-          <Ionicons name="chevron-down" size={14} color="#48DDB0" />
-        </TouchableOpacity>
-
-        {showTimelines && (
-          <View style={styles.dropdownMenu}>
-            {TIMELINES.map((t) => (
-              <TouchableOpacity
-                key={t}
-                onPress={() => {
-                  setTimeline(t);
-                  setShowTimelines(false);
-                }}
-              >
-                <Text style={styles.dropdownOption}>{t}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
+        <View style={styles.measureBox}>
+          <TextInput
+            style={styles.measureInput}
+            placeholder="e.g. 68"
+            placeholderTextColor="#60766E"
+            keyboardType="numeric"
+            value={targetWeight}
+            onChangeText={setTargetWeight}
+          />
+          <Text style={styles.unit}>kg</Text>
+        </View>
 
         <View style={styles.buttonRow}>
           <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
             <Text style={styles.backText}>← Back</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-            <Text style={styles.saveText}>Save</Text>
+          <TouchableOpacity
+            style={styles.saveButton}
+            onPress={handleSave}
+            disabled={saving}
+          >
+            <Text style={styles.saveText}>{saving ? 'Saving...' : 'Save'}</Text>
           </TouchableOpacity>
         </View>
 
@@ -208,31 +197,19 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
 
-  dropdown: {
+  measureBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     backgroundColor: '#0A1A14',
     borderRadius: 8,
     paddingHorizontal: 12,
-    height: 38,
-    width: 170,
+    height: 40,
+    width: 150,
     marginHorizontal: 25,
   },
 
-  dropdownPlaceholder: { color: '#60766E', fontSize: 12 },
-  dropdownValue: { color: '#fff', fontSize: 12 },
-
-  dropdownMenu: {
-    backgroundColor: '#0A1A14',
-    borderRadius: 8,
-    padding: 8,
-    width: 170,
-    marginHorizontal: 25,
-    marginTop: 4,
-  },
-
-  dropdownOption: { color: '#D4E6DF', fontSize: 12, paddingVertical: 7 },
+  measureInput: { flex: 1, color: '#fff', fontSize: 12, padding: 0 },
+  unit: { color: '#48DDB0', fontSize: 11, fontWeight: 'bold' },
 
   buttonRow: {
     flexDirection: 'row',
