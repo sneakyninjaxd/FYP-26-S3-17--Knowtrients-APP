@@ -3,7 +3,6 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import {
   Modal,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
@@ -11,6 +10,7 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 const REASONS = [
   'I found a better app',
@@ -18,53 +18,72 @@ const REASONS = [
   "I don't find Knowtrients useful",
   'Other',
 ];
-export default function account() {
+
+const BUG_AREAS = [
+  { id: 'logging', label: 'Logging' },
+  { id: 'insights', label: 'Insights' },
+  { id: 'profile', label: 'Profile' },
+  { id: 'account', label: 'Account' },
+  { id: 'other', label: 'Other' },
+];
+
+export default function Account() {
   const [showDelete, setShowDelete] = useState(false);
   const [reasons, setReasons] = useState([]);
   const [otherReason, setOtherReason] = useState('');
+
+  const [showBugReport, setShowBugReport] = useState(false);
+  const [bugArea, setBugArea] = useState(null);
+  const [bugDescription, setBugDescription] = useState('');
 
   const toggleReason = (item) => {
     setReasons((prev) =>
       prev.includes(item) ? prev.filter((r) => r !== item) : [...prev, item]
     );
   };
+
+  const openBugReport = () => {
+    setBugArea(null);
+    setBugDescription('');
+    setShowBugReport(true);
+  };
+
+  const canSubmitBug = bugArea !== null && bugDescription.trim() !== '';
+
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView>
-        {/* Logo */}
+      <ScrollView contentContainerStyle={{ paddingBottom: 30 }}>
+
         <View style={styles.header}>
           <Text style={styles.logo}>✦ Knowtrients</Text>
-
           <TouchableOpacity onPress={() => router.push('/account/account')}>
             <Ionicons name="person-circle" size={32} color="#48DDB0" />
           </TouchableOpacity>
         </View>
         <View style={styles.divider} />
-        <View>
-            <Text style = {styles.title}>
-                Account
-            </Text>
-            <Text style = {styles.description}>
-                Update your account details & settings 
-            </Text>
-    
-        <View style={[styles.step, styles.activityBox]}>
-            <Text
-                  style={styles.activity}
-                  onPress={() => router.push('/account/accountdetails')}
-                  >
-                  Account Details
-            </Text>
-        </View>
 
-        <View style={[styles.step, styles.activityBox]}>
-            <Text
-                  style={styles.activity}
-                  onPress={() => router.push('/account/subscription')}
-                  >
-                  Subscription
-            </Text>
-        </View>
+        <Text style={styles.title}>Account</Text>
+        <Text style={styles.description}>
+          Update your account details &amp; settings
+        </Text>
+
+        <TouchableOpacity
+          style={styles.activityBox}
+          onPress={() => router.push('/account/accountdetails')}
+        >
+          <Text style={styles.activity}>Account Details</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.activityBox}
+          onPress={() => router.push('/account/subscription')}
+        >
+          <Text style={styles.activity}>Subscription</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.activityBox} onPress={openBugReport}>
+          <Text style={styles.activity}>Report a Bug</Text>
+        </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.activityBox2}
@@ -72,26 +91,26 @@ export default function account() {
         >
           <Text style={styles.activity2}>Delete Account</Text>
         </TouchableOpacity>
-        {/* might need to end session and log out user after deleting account */}
-        <View style={[styles.step, styles.activityBox3]}>
-            <Text
-                  style={styles.activity3}
-                  onPress={() => router.push('/login')}
-                  >
-                  Log out
-            </Text>
-        </View>        
 
-        
-      </View>
-    </ScrollView>
-          <Modal visible={showDelete} transparent animationType="fade">
+        {/* might need to end session and log out user after deleting account */}
+        <TouchableOpacity
+          style={styles.activityBox3}
+          onPress={() => router.push('/login')}
+        >
+          <Text style={styles.activity3}>Log out</Text>
+        </TouchableOpacity>
+
+      </ScrollView>
+
+      {/* Delete account modal */}
+      <Modal visible={showDelete} transparent animationType="fade">
         <View style={styles.overlay}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>We will miss you :(</Text>
             <Text style={styles.modalSubtitle}>Let us know why you are leaving...</Text>
             <Text style={styles.modalHelper}>
-              Select all that apply. This helps Knowtrients to do better the next time you return.
+              Select all that apply. This helps Knowtrients to do better the next
+              time you return.
             </Text>
 
             {REASONS.map((item) => {
@@ -120,7 +139,8 @@ export default function account() {
             )}
 
             <Text style={styles.warning}>
-              ALL YOUR DATA WILL BE DELETED AND IT CAN&apos;T BE RECOVERED. THIS ACTION IS NOT REVERSIBLE.
+              ALL YOUR DATA WILL BE DELETED AND IT CAN&apos;T BE RECOVERED. THIS
+              ACTION IS NOT REVERSIBLE.
             </Text>
 
             <View style={styles.modalButtons}>
@@ -138,428 +158,247 @@ export default function account() {
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
 
+      {/* Bug report modal */}
+      <Modal visible={showBugReport} transparent animationType="fade">
+        <View style={styles.overlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Report a Bug</Text>
+            <Text style={styles.modalHelper}>
+              Let us know what went wrong so we can fix it.
+            </Text>
+
+            <Text style={styles.fieldLabel}>Where did it happen?</Text>
+
+            <View style={styles.chipWrap}>
+              {BUG_AREAS.map((area) => {
+                const active = bugArea === area.id;
+                return (
+                  <TouchableOpacity
+                    key={area.id}
+                    onPress={() => setBugArea(area.id)}
+                    style={active ? styles.chipActive : styles.chip}
+                  >
+                    <Text style={active ? styles.chipTextActive : styles.chipText}>
+                      {area.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <TextInput
+              style={styles.bugInput}
+              placeholder="Describe what happened and what you expected..."
+              placeholderTextColor="#60766E"
+              multiline
+              value={bugDescription}
+              onChangeText={setBugDescription}
+            />
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={styles.cancelButton}
+                onPress={() => setShowBugReport(false)}
+              >
+                <Text style={styles.cancelText}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={canSubmitBug ? styles.submitButton : styles.submitDisabled}
+                disabled={!canSubmitBug}
+                onPress={() => setShowBugReport(false)}
+              >
+                <Text style={canSubmitBug ? styles.submitText : styles.submitTextDisabled}>
+                  Submit
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </SafeAreaView>
   );
 }
 
-
 const styles = StyleSheet.create({
-  profileLogoContainer: {
-    alignItems: 'flex-start',
-    paddingLeft: 25,
-  },
+  container: { flex: 1, backgroundColor: '#020D09' },
 
-  profileLogo: {
-    fontSize: 20,
-  },
-
-  profileTagline: {
-    color: '#fff',
-    fontSize: 12,
-    marginTop: 3,
-  },
-
-    progressRow: {
-    flexDirection: 'row',
-    gap: 6,
-    marginBottom: 30,
-  },
-
-  step: {
-    flex: 1,
-  },
-
-  activeStep: {
-    color: '#48DDB0',
-    fontSize: 10,
-    marginBottom: 5,
-  },
-
-  inactiveStep: {
-    color: '#17644E',
-    fontSize: 10,
-    marginBottom: 5,
-  },
-
-  activeLine: {
-    height: 3,
-    backgroundColor: '#48DDB0',
-    borderRadius: 5,
-  },
-
-  inactiveLine: {
-    height: 3,
-    backgroundColor: '#123B2F',
-    borderRadius: 5,
-  },
-
-
-title: {
-  color: '#FFFFFF',
-  fontSize: 35,
-  fontFamily: 'serif',
-  marginBottom: 5,
-  paddingLeft: 25,
-  paddingTop: 10,
-},
-
-  description: {
-    color: '#3AA889',
-    fontSize: 13,
-    lineHeight: 17,
-    marginBottom: 20,
-    paddingLeft: 25,
-  },
-
-
-    dateInput: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#10251E',
-    width: 135,
-    height: 38,
-    borderRadius: 7,
-    paddingHorizontal: 10,
-  },
-
-  input: {
-    flex: 1,
-    color: '#FFFFFF',
-    padding: 0,
-  },
-
-  icon: {
-    color: '#A5DCCC',
-    fontSize: 18,
-  },
-
-  label: {
-    color: '#D4E6DF',
-    fontSize: 12,
-    marginBottom: 7,
-    marginTop: 12,
-  },
-
-genderRow: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  marginTop: 10,
-},
-
-radioRow: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  marginLeft: 15,
-},
-
-circle: {
-  width: 12,
-  height: 12,
-  borderRadius: 6,
-  borderWidth: 1,
-  borderColor: '#FFFFFF',
-  justifyContent: 'center',
-  alignItems: 'center',
-},
-
-circleSelected: {
-  borderColor: '#48DDB0',
-},
-
-dot: {
-  width: 6,
-  height: 6,
-  borderRadius: 3,
-  backgroundColor: '#48DDB0',
-},
-
-genderText: {
-  color: '#D4E6DF',
-  fontSize: 12,
-  marginLeft: 5,
-},
-  countryInput: {
-    width: 165,
-    height: 38,
-    backgroundColor: '#10251E',
-    borderRadius: 7,
+  header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 12,
+    paddingHorizontal: 25,
+    paddingVertical: 20,
   },
 
-  placeholder: {
-    color: '#60766E',
+  logo: { color: '#fff', fontSize: 20, fontFamily: 'serif' },
+
+  divider: { height: 1, backgroundColor: '#123B2F' },
+
+  title: {
+    color: '#FFFFFF',
+    fontSize: 32,
+    fontFamily: 'serif',
+    paddingHorizontal: 25,
+    paddingTop: 20,
+    marginBottom: 5,
+  },
+
+  description: {
+    color: '#3AA889',
     fontSize: 12,
+    paddingHorizontal: 25,
+    marginBottom: 20,
   },
 
-  arrow: {
-    color: '#48DDB0',
-    fontSize: 18,
-  },
-
-  helperText: {
-    color: '#60766E',
-    fontSize: 9,
-    marginTop: 7,
-  },
-
-  row: {
-    flexDirection: 'row',
-    gap: 20,
-  },
-
-  field: {
-    flex: 1,
-  },
-
-  measureInput: {
-    height: 38,
-    backgroundColor: '#10251E',
-    borderRadius: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 10,
-  },
-
-  unit: {
-    color: '#48DDB0',
-    fontSize: 11,
-    fontWeight: 'bold',
-  },
-
-  conditionContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-
-  conditionButton: {
-    backgroundColor: '#102A21',
-    paddingVertical: 7,
-    paddingHorizontal: 20,
-    borderRadius: 20,
-  },
-
-  selectedCondition: {
-    backgroundColor: '#102A21',
+  activityBox: {
     borderWidth: 1,
-    borderColor: '#48DDB0',
-    paddingVertical: 7,
-    paddingHorizontal: 20,
+    borderColor: '#123B2F',
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+    marginHorizontal: 25,
+    marginBottom: 12,
+  },
+
+  activity: { color: '#3AA889', fontSize: 13 },
+
+  activityBox2: {
+    borderWidth: 1,
+    borderColor: '#921d1d',
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+    marginHorizontal: 25,
+    marginBottom: 12,
+  },
+
+  activity2: { color: '#921d1d', fontSize: 13 },
+
+  activityBox3: {
+    backgroundColor: '#ce3535',
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+    marginHorizontal: 25,
+    marginTop: 80,
+  },
+
+  activity3: { color: '#faf7f7', fontSize: 13 },
+
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    padding: 20,
+  },
+
+  modalCard: {
+    backgroundColor: '#0B2119',
+    borderRadius: 16,
+    padding: 24,
+  },
+
+  modalTitle: { color: '#fff', fontSize: 24, fontFamily: 'serif' },
+  modalSubtitle: { color: '#D4E6DF', fontSize: 13, marginTop: 4 },
+  modalHelper: { color: '#60766E', fontSize: 11, marginTop: 8, marginBottom: 16 },
+
+  fieldLabel: { color: '#D4E6DF', fontSize: 12, marginBottom: 10 },
+
+  reasonBox: {
+    borderWidth: 1,
+    borderColor: '#123B2F',
     borderRadius: 20,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    marginBottom: 8,
   },
 
-  conditionText: {
-    color: '#60766E',
-    fontSize: 11,
-  },
+  reasonBoxActive: { borderColor: '#48DDB0' },
+  reasonText: { color: '#60766E', fontSize: 12 },
+  reasonTextActive: { color: '#48DDB0', fontSize: 12 },
 
-  selectedText: {
-    color: '#48DDB0',
-    fontSize: 11,
-  },
-
-  conditionInput: {
-    height: 42,
+  reasonInput: {
     borderWidth: 1,
     borderColor: '#48DDB0',
     borderRadius: 10,
-    marginTop: 8,
-    paddingHorizontal: 12,
-    color: '#FFFFFF',
-  },
-
-  conditionHelper: {
-    color: '#60766E',
-    fontSize: 9,
-    marginTop: 7,
-  },
-
-  continueButton: {
-    backgroundColor: '#48DDB0',
-    width: 143,
-    height: 42,
-    borderRadius: 7,
-    justifyContent: 'center',
-    alignItems: 'center',
-    alignSelf: 'center',
-    marginTop: 45,
-  },
-
-  continueText: {
-    color: '#00382B',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-
-  divider: {
-  backgroundColor: '#123B2F',
-  height: '1%',
-},
-
-date: {
-  color: '#48DDB0',
-  fontSize: 12,
-  paddingLeft: 25,
-  marginTop: 20,
-  marginBottom: 6,
-},
-  container: {
-    flex: 1,
-    backgroundColor: '#020D09',
-  },
-
-  logoContainer: {
-    height: 130,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  logo: {
+    padding: 12,
     color: '#fff',
-    fontSize: 28,
-    fontFamily: 'serif',
+    marginTop: 4,
   },
 
-    step: {
+  chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 },
+
+  chip: {
+    backgroundColor: '#102A21',
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+  },
+
+  chipActive: {
+    backgroundColor: '#102A21',
+    borderWidth: 1,
+    borderColor: '#48DDB0',
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+  },
+
+  chipText: { color: '#60766E', fontSize: 11 },
+  chipTextActive: { color: '#48DDB0', fontSize: 11 },
+
+  bugInput: {
+    borderWidth: 1,
+    borderColor: '#48DDB0',
+    borderRadius: 10,
+    padding: 12,
+    height: 90,
+    textAlignVertical: 'top',
+    color: '#fff',
+  },
+
+  warning: { color: '#E05555', fontSize: 11, marginVertical: 16 },
+
+  modalButtons: { flexDirection: 'row', gap: 12, marginTop: 16 },
+
+  cancelButton: {
     flex: 1,
+    backgroundColor: '#0A1A14',
+    borderRadius: 8,
+    paddingVertical: 14,
+    alignItems: 'center',
   },
 
-  activeStep: {
-    color: '#48DDB0',
-    fontSize: 10,
-    marginBottom: 5,
+  cancelText: { color: '#fff', fontSize: 14 },
+
+  deleteButton: {
+    flex: 1,
+    backgroundColor: '#E0453F',
+    borderRadius: 8,
+    paddingVertical: 14,
+    alignItems: 'center',
   },
 
-  inactiveStep: {
-    color: '#17644E',
-    fontSize: 10,
-    marginBottom: 5,
+  deleteText: { color: '#fff', fontSize: 14, fontWeight: '600' },
+
+  submitButton: {
+    flex: 1,
+    backgroundColor: '#4ECBA0',
+    borderRadius: 8,
+    paddingVertical: 14,
+    alignItems: 'center',
   },
 
-  activeLine: {
-    height: 3,
-    backgroundColor: '#48DDB0',
-    borderRadius: 5,
+  submitDisabled: {
+    flex: 1,
+    backgroundColor: '#123B2F',
+    borderRadius: 8,
+    paddingVertical: 14,
+    alignItems: 'center',
   },
 
-activityBox: {
-  borderWidth: 1,
-  borderColor: '#123B2F',
-  borderRadius: 12,
-  paddingVertical: 14,
-  paddingHorizontal: 18,
-  marginHorizontal: 25,
-  marginBottom: 12,
-},
-
-activity: {
-  color: '#3AA889',
-  fontSize: 13,
-},
-
-header: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  paddingHorizontal: 25,
-  paddingVertical: 20,
-},
-
-activityBox2: {
-  borderWidth: 1,
-  borderColor: '#921d1d',
-  borderRadius: 12,
-  paddingVertical: 14,
-  paddingHorizontal: 18,
-  marginHorizontal: 25,
-  marginBottom: 12,
-},
-
-activity2: {
-  color: '#921d1d',
-  fontSize: 13,
-},
-
-activityBox3: {
-  borderWidth: 1,
-  backgroundColor: '#ce3535',
-  borderRadius: 12,
-  paddingVertical: 14,
-  paddingHorizontal: 18,
-  marginHorizontal: 25,
-  marginTop: 80,
-
-},
-
-activity3: {
-  color: '#faf7f7',
-  fontSize: 13,
-},
-
-overlay: {
-  flex: 1,
-  backgroundColor: 'rgba(0,0,0,0.7)',
-  justifyContent: 'center',
-  padding: 20,
-},
-
-modalCard: {
-  backgroundColor: '#0B2119',
-  borderRadius: 16,
-  padding: 24,
-},
-
-modalTitle: { color: '#fff', fontSize: 24, fontFamily: 'serif' },
-modalSubtitle: { color: '#D4E6DF', fontSize: 13, marginTop: 4 },
-modalHelper: { color: '#60766E', fontSize: 11, marginTop: 8, marginBottom: 16 },
-
-reasonBox: {
-  borderWidth: 1,
-  borderColor: '#123B2F',
-  borderRadius: 20,
-  paddingVertical: 10,
-  paddingHorizontal: 16,
-  marginBottom: 8,
-},
-
-reasonBoxActive: { borderColor: '#48DDB0' },
-reasonText: { color: '#60766E', fontSize: 12 },
-reasonTextActive: { color: '#48DDB0', fontSize: 12 },
-
-reasonInput: {
-  borderWidth: 1,
-  borderColor: '#48DDB0',
-  borderRadius: 10,
-  padding: 12,
-  color: '#fff',
-  marginTop: 4,
-},
-
-warning: { color: '#E05555', fontSize: 11, marginVertical: 16 },
-
-modalButtons: { flexDirection: 'row', gap: 12 },
-
-cancelButton: {
-  flex: 1,
-  backgroundColor: '#0A1A14',
-  borderRadius: 8,
-  paddingVertical: 14,
-  alignItems: 'center',
-},
-
-cancelText: { color: '#fff', fontSize: 14 },
-
-deleteButton: {
-  flex: 1,
-  backgroundColor: '#E0453F',
-  borderRadius: 8,
-  paddingVertical: 14,
-  alignItems: 'center',
-},
-
-deleteText: { color: '#fff', fontSize: 14, fontWeight: '600' },
+  submitText: { color: '#00382B', fontSize: 14, fontWeight: '600' },
+  submitTextDisabled: { color: '#3A5049', fontSize: 14, fontWeight: '600' },
 });

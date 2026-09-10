@@ -4,12 +4,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import {
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -22,14 +22,14 @@ const MEAL_NAMES = {
   'evening-snack': 'Evening Snack',
 };
 
-const TABS = ['My Logged Items', 'My Favourites'];
+const TABS = ['All Items', 'My Favourites'];
 
 export default function AddFood() {
   const { meal } = useLocalSearchParams();
   const { entries, addEntry, favourites, toggleFavourite } = useFood();
 
   const [query, setQuery] = useState('');
-    const [tab, setTab] = useState('My Logged Items');
+    const [tab, setTab] = useState('All Items');
 
   const searching = query.trim().length > 0;
 
@@ -111,7 +111,7 @@ export default function AddFood() {
 
         {!searching && (
           <Text style={styles.sectionLabel}>
-            {tab === 'My Favourites' ? 'My Favourite(s)' : 'My Logged Item(s)'}
+            {tab === 'My Favourites' ? 'My Favourite(s)' : 'All Items'}
           </Text>
         )}
 

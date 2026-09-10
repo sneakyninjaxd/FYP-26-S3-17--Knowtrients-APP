@@ -3,16 +3,27 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import {
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 const INTENSITIES = ['Easy', 'Moderate', 'Intense'];
+
+const EXERCISE_TYPES = [
+  'Cardio',
+  'Strength Training',
+  'Flexibility',
+  'Sports',
+  'Walking',
+  'Swimming',
+  'Cycling',
+  'Other',
+];
 
 export default function AddActivities() {
   const { addActivity } = useActivities();
@@ -22,6 +33,7 @@ export default function AddActivities() {
   const [duration, setDuration] = useState('');
   const [intensity, setIntensity] = useState('Easy');
   const [notes, setNotes] = useState('');
+  const [showTypes, setShowTypes] = useState(false);
 
   const handleAdd = () => {
     if (!name) return;
@@ -71,13 +83,32 @@ export default function AddActivities() {
         <View style={styles.row}>
           <View style={styles.field}>
             <Text style={styles.label}>Select Exercise Type</Text>
-            <TextInput
-              style={styles.smallField}
-              placeholder="Select exercise"
-              placeholderTextColor="#60766E"
-              value={type}
-              onChangeText={setType}
-            />
+
+            <TouchableOpacity
+              style={styles.dropdown}
+              onPress={() => setShowTypes(!showTypes)}
+            >
+              <Text style={type ? styles.dropdownValue : styles.dropdownPlaceholder}>
+                {type || 'Select exercise'}
+              </Text>
+              <Ionicons name="chevron-down" size={14} color="#48DDB0" />
+            </TouchableOpacity>
+
+            {showTypes && (
+              <View style={styles.dropdownMenu}>
+                {EXERCISE_TYPES.map((t) => (
+                  <TouchableOpacity
+                    key={t}
+                    onPress={() => {
+                      setType(t);
+                      setShowTypes(false);
+                    }}
+                  >
+                    <Text style={styles.dropdownOption}>{t}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
 
             <Text style={styles.label}>Duration</Text>
             <View style={styles.measureInput}>
@@ -169,7 +200,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginBottom: 6,
     marginTop: 14,
-    paddingHorizontal: 25,
   },
 
   optional: { color: '#60766E', fontSize: 10 },
@@ -186,13 +216,27 @@ const styles = StyleSheet.create({
 
   field: { flex: 1 },
 
-  smallField: {
+  dropdown: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     backgroundColor: '#0A1A14',
     borderRadius: 8,
-    padding: 10,
-    color: '#fff',
-    fontSize: 12,
+    paddingHorizontal: 10,
+    height: 40,
   },
+
+  dropdownPlaceholder: { color: '#60766E', fontSize: 12 },
+  dropdownValue: { color: '#fff', fontSize: 12 },
+
+  dropdownMenu: {
+    backgroundColor: '#0A1A14',
+    borderRadius: 8,
+    padding: 8,
+    marginTop: 4,
+  },
+
+  dropdownOption: { color: '#D4E6DF', fontSize: 12, paddingVertical: 7 },
 
   measureInput: {
     backgroundColor: '#0A1A14',

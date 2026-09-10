@@ -1,5 +1,5 @@
-import {View,Text,TextInput,TouchableOpacity,StyleSheet,} from 'react-native';
 import { router } from 'expo-router';
+import { StyleSheet, Text, TextInput, TouchableOpacity, View, } from 'react-native';
 
 export default function Login() {
   return (
@@ -47,6 +47,15 @@ export default function Login() {
           </Text>
         </TouchableOpacity>
 
+        <Text style={styles.signup}>
+          New here?{' '}
+          <Text
+            style={styles.signupLink}
+            onPress={() => router.push('/CreateAccount')}
+          >
+            Create Account !
+          </Text>
+        </Text>
       </View>
 
     </View>
@@ -123,6 +132,16 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 28,
     fontFamily: 'serif',
-  }
+  },
+
+  signup: {
+  color: '#fff',
+  textAlign: 'center',
+  fontSize: 12,
+  marginTop: 'auto',
+  paddingBottom: 20,
+},
+
+signupLink: { color: '#48DDB0' },
 
 });
