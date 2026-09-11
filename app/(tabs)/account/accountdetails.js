@@ -1,8 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import {
-    SafeAreaView,
-    ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View
+  SafeAreaView,
+  ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View
 } from 'react-native';
 
 export default function ProfileScreen() {
@@ -11,7 +11,12 @@ export default function ProfileScreen() {
       <ScrollView>
         {/* Logo */}
         <View style={styles.header}>
-          <Text style={styles.logo}>✦ Knowtrients</Text>
+          <View style={styles.brandRow}>
+            <View style={styles.logoBadge}>
+              <Text style={styles.logoGlyph}>✦</Text>
+            </View>
+            <Text style={styles.logo}>Knowtrients</Text>
+          </View>
 
           <TouchableOpacity onPress={() => router.push('/account/account')}>
             <Ionicons name="person-circle" size={32} color="#48DDB0" />
@@ -104,14 +109,30 @@ export default function ProfileScreen() {
 
 
 const styles = StyleSheet.create({
-  profileLogoContainer: {
-    alignItems: 'flex-start',
-    paddingLeft: 25,
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 25,
+    paddingVertical: 16,
   },
 
-  profileLogo: {
-    fontSize: 20,
+  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+
+  logoBadge: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    backgroundColor: '#48DDB0',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
+
+  logoGlyph: { fontSize: 15, color: '#00382B' },
+
+  logo: { color: '#fff', fontSize: 19, fontWeight: '600' },
+
+  divider: { height: 1, backgroundColor: '#123B2F' },
 
   profileTagline: {
     color: '#fff',

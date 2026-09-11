@@ -1,8 +1,9 @@
 import { useSleep } from '@/contexts/sleep-context';
+import { toLogDate } from '@/services/api';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { router } from 'expo-router';
-import { useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
 import {
   Platform,
   ScrollView,
@@ -15,37 +16,77 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 const MAX_HOURS = 10;
 
+/** 7.5 → { h: 7, m: 30 }. The API stores one decimal, not an h/m pair. */
+const splitHours = (value) => {
+  const total = Math.round((value ?? 0) * 60);
+  return { h: Math.floor(total / 60), m: total % 60 };
+};
+
+/** Days between a past date and today, for sizing the history fetch. */
+const daysAgo = (date) => {
+  const ms = new Date(toLogDate()).getTime() - new Date(toLogDate(date)).getTime();
+  return Math.max(0, Math.round(ms / 86400000));
+};
+
 export default function Sleep() {
-  const { sleepLogs } = useSleep();
+  const { sleepLogs, loadSleep } = useSleep();
   const [date, setDate] = useState(new Date());
   const [showPicker, setShowPicker] = useState(false);
 
-  const key = date.toISOString().split('T')[0];
-  const todayLog = sleepLogs.find((s) => s.date === key);
+  // Pick up anything added on the add-sleep screen before we navigated back.
+  useFocusEffect(
+    useCallback(() => {
+      loadSleep(7);
+    }, [loadSleep])
+  );
 
-  // last 7 days, oldest first
-  const week = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(date);
-    d.setDate(d.getDate() - (6 - i));
-    const dKey = d.toISOString().split('T')[0];
-    const log = sleepLogs.find((s) => s.date === dKey);
+  /**
+   * Selecting an older date needs history the default 7-day window doesn't
+   * cover, so widen the fetch to reach it (plus the week shown in the chart).
+   */
+  const selectDate = (selected) => {
+    setDate(selected);
+    loadSleep(Math.min(daysAgo(selected) + 7, 90));
+  };
 
-    return {
-      label: d.toLocaleDateString('en-GB', { weekday: 'short' }),
-      value: log ? log.hours + log.minutes / 60 : 0,
-    };
-  });
+  const key = toLogDate(date);
+  const todayLog = sleepLogs.find((s) => s.log_date === key);
+  const duration = todayLog ? splitHours(todayLog.hours) : null;
+
+  // last 7 days ending on the selected date, oldest first
+  const week = useMemo(
+    () =>
+      Array.from({ length: 7 }, (_, i) => {
+        const d = new Date(date);
+        d.setDate(d.getDate() - (6 - i));
+        const dKey = toLogDate(d);
+        const log = sleepLogs.find((s) => s.log_date === dKey);
+
+        return {
+          label: d.toLocaleDateString('en-GB', { weekday: 'short' }),
+          value: log?.hours ?? 0,
+        };
+      }),
+    [sleepLogs, date]
+  );
 
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
 
         <View style={styles.header}>
-          <Text style={styles.logo}>✦ Knowtrients</Text>
+          <View style={styles.brandRow}>
+            <View style={styles.logoBadge}>
+              <Text style={styles.logoGlyph}>✦</Text>
+            </View>
+            <Text style={styles.logo}>Knowtrients</Text>
+          </View>
+
           <TouchableOpacity onPress={() => router.push('/account/account')}>
             <Ionicons name="person-circle" size={32} color="#48DDB0" />
           </TouchableOpacity>
         </View>
+        <View style={styles.divider} />
         <View style={styles.divider} />
 
         <View style={styles.titleRow}>
@@ -70,12 +111,12 @@ export default function Sleep() {
             maximumDate={new Date()}
             onChange={(event, selected) => {
               setShowPicker(Platform.OS === 'ios');
-              if (selected) setDate(selected);
+              if (selected) selectDate(selected);
             }}
           />
         )}
 
-        {/* Today's sleep card */}
+        {/* Selected day's sleep card */}
         <View style={styles.sleepCard}>
           <View style={styles.sleepCardTop}>
             <Text style={styles.sleepCardTitle}>Today&apos;s Sleep</Text>
@@ -88,10 +129,16 @@ export default function Sleep() {
           </View>
 
           <Text style={styles.duration}>
-            {todayLog
-              ? <>{todayLog.hours}<Text style={styles.unit}> h </Text>{todayLog.minutes}<Text style={styles.unit}> m</Text></>
+            {duration
+              ? <>{duration.h}<Text style={styles.unit}> h </Text>{duration.m}<Text style={styles.unit}> m</Text></>
               : <>--<Text style={styles.unit}> h </Text>--<Text style={styles.unit}> m</Text></>}
           </Text>
+
+          {todayLog?.bedtime && todayLog?.wake_time && (
+            <Text style={styles.times}>
+              {todayLog.bedtime} → {todayLog.wake_time}
+            </Text>
+          )}
 
           <Text
             style={styles.statsLink}
@@ -142,12 +189,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 25,
-    paddingVertical: 20,
+    paddingVertical: 16,
   },
 
-  logo: { color: '#fff', fontSize: 20, fontFamily: 'serif' },
-  divider: { height: 1, backgroundColor: '#123B2F' },
+  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
 
+  logoBadge: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    backgroundColor: '#48DDB0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  logoGlyph: { fontSize: 15, color: '#00382B' },
+
+  logo: { color: '#fff', fontSize: 19, fontWeight: '600' },
+
+  divider: { height: 1, backgroundColor: '#123B2F' },
   titleRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -193,6 +253,8 @@ const styles = StyleSheet.create({
   },
 
   unit: { fontSize: 20, color: '#4ECBA0' },
+
+  times: { color: '#60766E', fontSize: 10, marginTop: 4 },
 
   statsLink: {
     color: '#60766E',

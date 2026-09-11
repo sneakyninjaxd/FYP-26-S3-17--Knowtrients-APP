@@ -1,4 +1,5 @@
 import { useAuth } from '@/contexts/auth-context';
+import { api } from '@/services/api';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useState } from 'react';
@@ -11,7 +12,7 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const REASONS = [
   'I found a better app',
@@ -29,7 +30,9 @@ const BUG_AREAS = [
 ];
 
 export default function Account() {
-  const { logOut } = useAuth();
+  const insets = useSafeAreaInsets();
+  const { logOut, token } = useAuth();
+
   const [showDelete, setShowDelete] = useState(false);
   const [reasons, setReasons] = useState([]);
   const [otherReason, setOtherReason] = useState('');
@@ -37,6 +40,9 @@ export default function Account() {
   const [showBugReport, setShowBugReport] = useState(false);
   const [bugArea, setBugArea] = useState(null);
   const [bugDescription, setBugDescription] = useState('');
+  const [submittingBug, setSubmittingBug] = useState(false);
+  const [bugError, setBugError] = useState(null);
+  const [bugSent, setBugSent] = useState(null);
 
   const toggleReason = (item) => {
     setReasons((prev) =>
@@ -47,17 +53,50 @@ export default function Account() {
   const openBugReport = () => {
     setBugArea(null);
     setBugDescription('');
+    setBugError(null);
+    setBugSent(null);
     setShowBugReport(true);
   };
 
-  const canSubmitBug = bugArea !== null && bugDescription.trim() !== '';
+  // The API needs a body of at least 3 characters.
+  const canSubmitBug = bugArea !== null && bugDescription.trim().length >= 3;
+
+  /**
+   * Lands in the admin request queue. The form has no subject field, so one
+   * is derived from the selected area.
+   */
+  const submitBug = async () => {
+    if (!token || !canSubmitBug || submittingBug) return;
+
+    setSubmittingBug(true);
+    setBugError(null);
+    try {
+      const area = BUG_AREAS.find((a) => a.id === bugArea);
+      const created = await api.createSupportRequest(token, {
+        category: 'bug_report',
+        subject: `Bug report — ${area?.label ?? 'Other'}`,
+        body: bugDescription.trim(),
+      });
+      setBugSent(created.display_id ?? `#${created.id}`);
+    } catch (err) {
+      setBugError(err?.message ?? 'Could not send your report. Please try again.');
+    } finally {
+      setSubmittingBug(false);
+    }
+  };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={{ paddingBottom: 30 }}>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <ScrollView contentContainerStyle={{ paddingBottom: 30 + insets.bottom }}>
 
         <View style={styles.header}>
-          <Text style={styles.logo}>✦ Knowtrients</Text>
+          <View style={styles.brandRow}>
+            <View style={styles.logoBadge}>
+              <Text style={styles.logoGlyph}>✦</Text>
+            </View>
+            <Text style={styles.logo}>Knowtrients</Text>
+          </View>
+
           <TouchableOpacity onPress={() => router.push('/account/account')}>
             <Ionicons name="person-circle" size={32} color="#48DDB0" />
           </TouchableOpacity>
@@ -95,9 +134,9 @@ export default function Account() {
         </TouchableOpacity>
 
         {/* might need to end session and log out user after deleting account */}
-<TouchableOpacity style={styles.activityBox3} onPress={logOut}>
-  <Text style={styles.activity3}>Log out</Text>
-</TouchableOpacity>
+        <TouchableOpacity style={styles.activityBox3} onPress={logOut}>
+          <Text style={styles.activity3}>Log out</Text>
+        </TouchableOpacity>
 
       </ScrollView>
 
@@ -163,56 +202,83 @@ export default function Account() {
         <View style={styles.overlay}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Report a Bug</Text>
-            <Text style={styles.modalHelper}>
-              Let us know what went wrong so we can fix it.
-            </Text>
 
-            <Text style={styles.fieldLabel}>Where did it happen?</Text>
+            {bugSent ? (
+              <>
+                <Text style={styles.modalHelper}>
+                  Thanks — your report has been sent. Reference {bugSent}.
+                </Text>
 
-            <View style={styles.chipWrap}>
-              {BUG_AREAS.map((area) => {
-                const active = bugArea === area.id;
-                return (
+                <View style={styles.modalButtons}>
                   <TouchableOpacity
-                    key={area.id}
-                    onPress={() => setBugArea(area.id)}
-                    style={active ? styles.chipActive : styles.chip}
+                    style={styles.submitButton}
+                    onPress={() => setShowBugReport(false)}
                   >
-                    <Text style={active ? styles.chipTextActive : styles.chipText}>
-                      {area.label}
+                    <Text style={styles.submitText}>Done</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            ) : (
+              <>
+                <Text style={styles.modalHelper}>
+                  Let us know what went wrong so we can fix it.
+                </Text>
+
+                <Text style={styles.fieldLabel}>Where did it happen?</Text>
+
+                <View style={styles.chipWrap}>
+                  {BUG_AREAS.map((area) => {
+                    const active = bugArea === area.id;
+                    return (
+                      <TouchableOpacity
+                        key={area.id}
+                        onPress={() => setBugArea(area.id)}
+                        style={active ? styles.chipActive : styles.chip}
+                      >
+                        <Text style={active ? styles.chipTextActive : styles.chipText}>
+                          {area.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
+                <TextInput
+                  style={styles.bugInput}
+                  placeholder="Describe what happened and what you expected..."
+                  placeholderTextColor="#60766E"
+                  multiline
+                  maxLength={5000}
+                  value={bugDescription}
+                  onChangeText={setBugDescription}
+                />
+
+                {bugError && <Text style={styles.bugError}>{bugError}</Text>}
+
+                <View style={styles.modalButtons}>
+                  <TouchableOpacity
+                    style={styles.cancelButton}
+                    onPress={() => setShowBugReport(false)}
+                  >
+                    <Text style={styles.cancelText}>Cancel</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={
+                      canSubmitBug && !submittingBug
+                        ? styles.submitButton
+                        : styles.submitDisabled
+                    }
+                    disabled={!canSubmitBug || submittingBug}
+                    onPress={submitBug}
+                  >
+                    <Text style={canSubmitBug ? styles.submitText : styles.submitTextDisabled}>
+                      {submittingBug ? 'Sending…' : 'Submit'}
                     </Text>
                   </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            <TextInput
-              style={styles.bugInput}
-              placeholder="Describe what happened and what you expected..."
-              placeholderTextColor="#60766E"
-              multiline
-              value={bugDescription}
-              onChangeText={setBugDescription}
-            />
-
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={styles.cancelButton}
-                onPress={() => setShowBugReport(false)}
-              >
-                <Text style={styles.cancelText}>Cancel</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={canSubmitBug ? styles.submitButton : styles.submitDisabled}
-                disabled={!canSubmitBug}
-                onPress={() => setShowBugReport(false)}
-              >
-                <Text style={canSubmitBug ? styles.submitText : styles.submitTextDisabled}>
-                  Submit
-                </Text>
-              </TouchableOpacity>
-            </View>
+                </View>
+              </>
+            )}
           </View>
         </View>
       </Modal>
@@ -228,13 +294,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 25,
-    paddingVertical: 20,
+    paddingVertical: 16,
   },
 
-  logo: { color: '#fff', fontSize: 20, fontFamily: 'serif' },
+  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+
+  logoBadge: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    backgroundColor: '#48DDB0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  logoGlyph: { fontSize: 15, color: '#00382B' },
+
+  logo: { color: '#fff', fontSize: 19, fontWeight: '600' },
 
   divider: { height: 1, backgroundColor: '#123B2F' },
-
   title: {
     color: '#FFFFFF',
     fontSize: 32,
@@ -357,6 +435,8 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
     color: '#fff',
   },
+
+  bugError: { color: '#E07A5F', fontSize: 11, marginTop: 10 },
 
   warning: { color: '#E05555', fontSize: 11, marginVertical: 16 },
 

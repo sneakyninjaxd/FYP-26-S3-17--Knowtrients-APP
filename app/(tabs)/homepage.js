@@ -1,9 +1,11 @@
-import { useActivities } from '@/contexts/activity-context';
+import { useAuth } from '@/contexts/auth-context';
 import { useFood } from '@/contexts/food-context';
 import { useProfile } from '@/contexts/profile-context';
-import { useSleep } from '@/contexts/sleep-context';
+import { api, toLogDate } from '@/services/api';
+import { dailyGoals } from '@/src/goals';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
 import {
   ScrollView,
   StyleSheet,
@@ -11,44 +13,45 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
 
-const GOALS = {
-  calories: 3000,
-  steps: 10000,
-  sleep: 8,
-  activeTime: 90,
+const GOALS = { steps: 10000, sleep: 8, activeTime: 90 };
+
+/** PLACEHOLDER — the backend has no steps field. Delete once one exists. */
+const SAMPLE_STEPS = 6800;
+
+/** Hardcoded: sleep isn't one of the model's ten features. */
+const SLEEP_INSIGHT = {
+  id: 'sleep',
+  title: 'Sleep Insight',
+  lines: [
+    'You slept 6h 20m last night — under the 8h guideline.',
+    '–Try heading to bed 30 minutes earlier tonight',
+    '–Keep screens away for the last hour before sleep',
+  ],
 };
 
-const HOME_INSIGHTS = [
-  {
-    id: 'diet',
-    title: 'Diet Insight',
-    lines: [
-      'Take in another 700 kcal to complete your calorie intake for today !',
-      '– Chicken and Rice: One large grilled chicken breast with one cup of pilaf rice and mixed vegetables.',
-      '– Salmon Plate: One baked salmon fillet with one cup of white or brown rice and one cup of steamed broccoli.',
-    ],
-  },
-  {
-    id: 'activity',
-    title: 'Activities Insight',
-    lines: [
-      'Walk another 3000 steps to reach your daily goal!',
-      '–Take a walk in the park',
-      '–Cycle for another 30 mins to lose ~100kcal',
-    ],
-  },
-];
+/** Hardcoded: activity isn't a model input either. */
+const ACTIVITY_INSIGHT = {
+  id: 'activity',
+  title: 'Activities Insight',
+  lines: [
+    'Walk another 3000 steps to reach your daily goal!',
+    '–Take a walk in the park',
+    '–Cycle for another 30 mins to lose ~100kcal',
+  ],
+};
 
-const pct = (value, goal) => Math.min((value / goal) * 100, 100);
+const pct = (value, goal) => (goal > 0 ? Math.min((value / goal) * 100, 100) : 0);
 
-function Bar({ label, value, goal, unit, color }) {
+function Bar({ label, value, goal, unit, color, sample }) {
   return (
     <View style={styles.barBlock}>
       <View style={styles.barTop}>
-        <Text style={[styles.barLabel, { color }]}>{label}</Text>
+        <Text style={[styles.barLabel, { color }]}>
+          {label}{sample ? <Text style={styles.sampleTag}> · sample</Text> : null}
+        </Text>
         <Text style={styles.barValue}>
           {value}<Text style={styles.barGoal}>/{goal} {unit}</Text>
         </Text>
@@ -63,34 +66,42 @@ function Bar({ label, value, goal, unit, color }) {
 }
 
 export default function Homepage() {
+  const insets = useSafeAreaInsets();
+  const { token, user } = useAuth();
   const { profile } = useProfile();
-  const { entries } = useFood();
-  const { activities } = useActivities();
-  const { sleepLogs } = useSleep();
+  const { summary, loadSummary } = useFood();
 
-  const today = new Date().toISOString().split('T')[0];
+  const [rec, setRec] = useState(null);
 
-  const calories = entries
-    .filter((e) => e.date === today)
-    .reduce((sum, e) => sum + e.kcalPerUnit * e.quantity, 0);
+  useFocusEffect(
+    useCallback(() => {
+      loadSummary(toLogDate());
 
-  const activeTime = activities
-    .filter((a) => a.date === today)
-    .reduce((sum, a) => sum + (parseInt(a.duration) || 0), 0);
+      // The diet card mirrors the Insight tab, so a failure here is silent.
+      if (token) {
+        api
+          .getTodaysRecommendation(token, toLogDate())
+          .then(setRec)
+          .catch(() => setRec(null));
+      }
+    }, [loadSummary, token])
+  );
 
-  const sleepLog = sleepLogs.find((s) => s.date === today);
-  const sleep = sleepLog
-    ? Math.round((sleepLog.hours + sleepLog.minutes / 60) * 10) / 10
-    : 0;
+  const goals = useMemo(() => dailyGoals(profile), [profile]);
 
-  const TODAY = { calories, steps: 0, sleep, activeTime };
+  const TODAY = {
+    calories: Math.round(summary?.totals?.calories ?? 0),
+    steps: SAMPLE_STEPS,
+    sleep: summary?.sleep_hours != null ? Math.round(summary.sleep_hours * 10) / 10 : 0,
+    activeTime: Math.round(summary?.activity_minutes ?? 0),
+  };
 
   const hour = new Date().getHours();
   const greeting =
     hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
 
   const completion = Math.round(
-    (pct(TODAY.calories, GOALS.calories) +
+    (pct(TODAY.calories, goals.calories) +
       pct(TODAY.steps, GOALS.steps) +
       pct(TODAY.sleep, GOALS.sleep) +
       pct(TODAY.activeTime, GOALS.activeTime)) / 4
@@ -100,16 +111,37 @@ export default function Homepage() {
   const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
   const filled = (completion / 100) * CIRCUMFERENCE;
 
-  return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={{ paddingBottom: 30 }}>
+  /** Real recommendation when there is one, otherwise a prompt to log. */
+  const dietInsight = rec
+    ? {
+        id: 'diet',
+        title: 'Diet Insight',
+        lines: [rec.recommendation, ...rec.explanation],
+      }
+    : {
+        id: 'diet',
+        title: 'Diet Insight',
+        lines: ['Log your meals today to see your personalised recommendation.'],
+      };
 
+  const insights = [dietInsight, SLEEP_INSIGHT, ACTIVITY_INSIGHT];
+
+  return (
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <ScrollView contentContainerStyle={{ paddingBottom: 30 + insets.bottom }}>
         <View style={styles.header}>
-          <Text style={styles.logo}>✦ Knowtrients</Text>
+          <View style={styles.brandRow}>
+            <View style={styles.logoBadge}>
+              <Text style={styles.logoGlyph}>✦</Text>
+            </View>
+            <Text style={styles.logo}>Knowtrients</Text>
+          </View>
+
           <TouchableOpacity onPress={() => router.push('/account/account')}>
             <Ionicons name="person-circle" size={32} color="#48DDB0" />
           </TouchableOpacity>
         </View>
+        <View style={styles.divider} />
         <View style={styles.divider} />
 
         <Text style={styles.date}>
@@ -119,7 +151,7 @@ export default function Homepage() {
         </Text>
 
         <Text style={styles.greeting}>
-          {greeting}, {profile.firstName || 'User'}
+          {greeting}, {user?.first_name || 'there'}
         </Text>
 
         {/* Daily goals card */}
@@ -149,10 +181,10 @@ export default function Homepage() {
             <View style={styles.cardRight}>
               <Text style={styles.cardTitle}>Daily Goals</Text>
 
-              <Bar label="Calories Intake" value={TODAY.calories} goal={GOALS.calories}
+              <Bar label="Calories Intake" value={TODAY.calories} goal={goals.calories}
                    unit="kcal" color="#48DDB0" />
               <Bar label="Steps" value={TODAY.steps} goal={GOALS.steps}
-                   unit="steps" color="#3A9BD9" />
+                   unit="steps" color="#3A9BD9" sample />
               <Bar label="Sleep Hours" value={TODAY.sleep} goal={GOALS.sleep}
                    unit="hours" color="#A05BD4" />
               <Bar label="Active Time" value={TODAY.activeTime} goal={GOALS.activeTime}
@@ -162,7 +194,7 @@ export default function Homepage() {
         </View>
 
         {/* Insight cards */}
-        {HOME_INSIGHTS.map((insight) => (
+        {insights.map((insight) => (
           <View key={insight.id} style={styles.insightCard}>
             <View style={styles.insightHeader}>
               <Ionicons name="bulb-outline" size={14} color="#48DDB0" />
@@ -185,19 +217,31 @@ export default function Homepage() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#020D09' },
-
-  header: {
+    header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 25,
-    paddingVertical: 20,
+    paddingVertical: 16,
   },
 
-  logo: { color: '#fff', fontSize: 20, fontFamily: 'serif' },
-  divider: { height: 1, backgroundColor: '#123B2F' },
+  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
 
+  logoBadge: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    backgroundColor: '#48DDB0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  logoGlyph: { fontSize: 15, color: '#00382B' },
+
+  logo: { color: '#fff', fontSize: 19, fontWeight: '600' },
+
+  divider: { height: 1, backgroundColor: '#123B2F' },
+  container: { flex: 1, backgroundColor: '#020D09' },
   date: {
     color: '#48DDB0',
     fontSize: 11,
@@ -242,6 +286,8 @@ const styles = StyleSheet.create({
   barGoal: { color: '#60766E', fontSize: 7 },
   barTrack: { height: 4, backgroundColor: '#123B2F', borderRadius: 2 },
   barFill: { height: 4, borderRadius: 2 },
+
+  sampleTag: { color: '#60766E', fontSize: 7, fontStyle: 'italic' },
 
   insightCard: {
     borderWidth: 1,

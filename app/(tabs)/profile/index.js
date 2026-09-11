@@ -49,7 +49,13 @@ export default function Profile() {
       <ScrollView>
 
         <View style={styles.header}>
-          <Text style={styles.logo}>✦ Knowtrients</Text>
+          <View style={styles.brandRow}>
+            <View style={styles.logoBadge}>
+              <Text style={styles.logoGlyph}>✦</Text>
+            </View>
+            <Text style={styles.logo}>Knowtrients</Text>
+          </View>
+
           <TouchableOpacity onPress={() => router.push('/account/account')}>
             <Ionicons name="person-circle" size={32} color="#48DDB0" />
           </TouchableOpacity>
@@ -141,6 +147,7 @@ export default function Profile() {
 }
 
 const styles = StyleSheet.create({
+
   container: { flex: 1, backgroundColor: '#020D09' },
 
   header: {
@@ -148,10 +155,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 25,
-    paddingVertical: 20,
+    paddingVertical: 16,
   },
 
-  logo: { color: '#fff', fontSize: 20, fontFamily: 'serif' },
+  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+
+  logoBadge: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    backgroundColor: '#48DDB0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  logoGlyph: { fontSize: 15, color: '#00382B' },
+
+  logo: { color: '#fff', fontSize: 19, fontWeight: '600' },
 
   divider: { height: 1, backgroundColor: '#123B2F' },
 

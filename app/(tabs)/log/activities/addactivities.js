@@ -1,4 +1,5 @@
 import { useActivities } from '@/contexts/activity-context';
+import { toLogDate } from '@/services/api';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useState } from 'react';
@@ -34,25 +35,38 @@ export default function AddActivities() {
   const [intensity, setIntensity] = useState('Easy');
   const [notes, setNotes] = useState('');
   const [showTypes, setShowTypes] = useState(false);
+  const [saving, setSaving] = useState(false);
 
-  const handleAdd = () => {
-    if (!name) return;
+  const minutes = Number(duration);
+  const canSubmit = type && minutes > 0 && minutes <= 1440;
 
-    addActivity({
-      name,
-      type: type || 'Exercise',
-      duration: `${duration || 0}min`,
-      intensity,
-      notes,
-      calories: 0,
-      date: new Date().toISOString().split('T')[0],
-      time: new Date().toLocaleTimeString('en-GB', {
-        hour: 'numeric',
-        minute: '2-digit',
-      }),
-    });
+  /**
+   * The API has activity_type but no separate name field, so the typed
+   * name is kept in notes rather than dropped.
+   */
+  const handleAdd = async () => {
+    if (!canSubmit || saving) return;
 
-    router.back();
+    setSaving(true);
+    try {
+      const noteParts = [name.trim(), notes.trim()].filter(Boolean);
+
+      const created = await addActivity({
+        activity_type: type,
+        duration_minutes: minutes,
+        intensity,
+        notes: noteParts.join(' — ') || null,
+        date: toLogDate(),
+      });
+
+      if (!created) {
+        alert('Could not save this activity. Please try again.');
+        return;
+      }
+      router.back();
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -60,17 +74,26 @@ export default function AddActivities() {
       <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
 
         <View style={styles.header}>
-          <Text style={styles.logo}>✦ Knowtrients</Text>
+          <View style={styles.brandRow}>
+            <View style={styles.logoBadge}>
+              <Text style={styles.logoGlyph}>✦</Text>
+            </View>
+            <Text style={styles.logo}>Knowtrients</Text>
+          </View>
+
           <TouchableOpacity onPress={() => router.push('/account/account')}>
             <Ionicons name="person-circle" size={32} color="#48DDB0" />
           </TouchableOpacity>
         </View>
+        <View style={styles.divider} />
 
         <Text style={styles.title}>Add Activities</Text>
         <Text style={styles.subtitle}>Insert your daily activities here</Text>
 
         {/* Exercise name */}
-        <Text style={styles.label}>Exercise Name</Text>
+        <Text style={styles.label}>
+          Exercise Name <Text style={styles.optional}>(Optional)</Text>
+        </Text>
         <TextInput
           style={styles.textField}
           placeholder="Name this exercise"
@@ -157,8 +180,12 @@ export default function AddActivities() {
         />
 
         {/* Add */}
-        <TouchableOpacity style={styles.submit} onPress={handleAdd}>
-          <Text style={styles.submitText}>Add</Text>
+        <TouchableOpacity
+          style={[styles.submit, !canSubmit && styles.submitDisabled]}
+          onPress={handleAdd}
+          disabled={!canSubmit || saving}
+        >
+          <Text style={styles.submitText}>{saving ? 'Saving…' : 'Add'}</Text>
         </TouchableOpacity>
 
       </ScrollView>
@@ -174,11 +201,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 25,
-    paddingVertical: 20,
+    paddingVertical: 16,
   },
 
-  logo: { color: '#fff', fontSize: 20, fontFamily: 'serif' },
+  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
 
+  logoBadge: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    backgroundColor: '#48DDB0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  logoGlyph: { fontSize: 15, color: '#00382B' },
+
+  logo: { color: '#fff', fontSize: 19, fontWeight: '600' },
+
+  divider: { height: 1, backgroundColor: '#123B2F' },
   title: {
     color: '#fff',
     fontSize: 32,
@@ -200,6 +241,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginBottom: 6,
     marginTop: 14,
+    paddingHorizontal: 25,
   },
 
   optional: { color: '#60766E', fontSize: 10 },
@@ -283,6 +325,8 @@ const styles = StyleSheet.create({
     marginHorizontal: 60,
     marginTop: 60,
   },
+
+  submitDisabled: { opacity: 0.5 },
 
   submitText: { color: '#00382B', fontSize: 15, fontWeight: '600' },
 });

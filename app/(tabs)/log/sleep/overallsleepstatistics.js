@@ -3,8 +3,9 @@ import { useSleep } from '@/contexts/sleep-context';
 import { RANGES } from '@/src/ranges';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   ScrollView,
   StyleSheet,
   Text,
@@ -12,63 +13,99 @@ import {
   View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+
 const MAX_HOURS = 10;
 
+/** "HH:MM" → minutes since midnight, or null if absent/malformed. */
+const timeToMinutes = (value) => {
+  if (typeof value !== 'string') return null;
+  const [h, m] = value.split(':').map(Number);
+  if (Number.isNaN(h) || Number.isNaN(m)) return null;
+  return h * 60 + m;
+};
 
 export default function SleepStatistics() {
-  const { sleepLogs } = useSleep();
+  const { sleepLogs, isLoading, loadSleep } = useSleep();
   const { profile } = useProfile();
-  const isPremium = profile.plan === 'premium';
 
-  const available = RANGES.filter((r) => !r.premium || isPremium);
+  // `plan` is client-side only — there's no subscription column yet.
+  const isPremium = profile?.plan === 'premium';
+
+  const available = useMemo(
+    () => RANGES.filter((r) => !r.premium || isPremium),
+    [isPremium]
+  );
 
   const [range, setRange] = useState(available[0]);
   const [showRange, setShowRange] = useState(false);
-  // average duration across all logs
-  const totalMinutes = sleepLogs.reduce(
-    (sum, s) => sum + s.hours * 60 + s.minutes,
-    0
-  );
-  const avgMinutes = sleepLogs.length ? totalMinutes / sleepLogs.length : 0;
+
+  /** Changing the range refetches — the server caps `days` at 90. */
+  const selectRange = (r) => {
+    setRange(r);
+    setShowRange(false);
+    loadSleep(Math.min(r.days, 90));
+  };
+
+  // average duration; `hours` is a single decimal, not an h/m pair
+  const avgMinutes = useMemo(() => {
+    if (!sleepLogs.length) return 0;
+    const total = sleepLogs.reduce((sum, s) => sum + (s.hours ?? 0) * 60, 0);
+    return total / sleepLogs.length;
+  }, [sleepLogs]);
+
   const avgHours = Math.floor(avgMinutes / 60);
   const avgMins = Math.round(avgMinutes % 60);
 
-  // average bedtime and wake time
+  /**
+   * Average bedtime or wake time. Both are optional on the API, so logs
+   * without them are skipped rather than crashing the average.
+   */
   const avgTime = (field) => {
-    if (!sleepLogs.length) return '--';
-    const mins = sleepLogs.reduce((sum, s) => {
-      const [h, m] = s[field].split(':').map(Number);
-      return sum + h * 60 + m;
-    }, 0) / sleepLogs.length;
+    const values = sleepLogs
+      .map((s) => timeToMinutes(s[field]))
+      .filter((v) => v !== null);
 
+    if (!values.length) return '--';
+
+    const mins = values.reduce((sum, v) => sum + v, 0) / values.length;
     const h = Math.floor(mins / 60);
     const m = Math.round(mins % 60);
     return `${h % 12 || 12}.${String(m).padStart(2, '0')}${h < 12 ? 'am' : 'pm'}`;
   };
 
   // chart data for the selected range
-  const chart = Array.from({ length: Math.min(range.days, 7) }, (_, i) => {
-    const d = new Date();
-    d.setDate(d.getDate() - (6 - i));
-    const key = d.toISOString().split('T')[0];
-    const log = sleepLogs.find((s) => s.date === key);
+  const chart = useMemo(() => {
+    const span = Math.min(range.days, 7);
+    return Array.from({ length: span }, (_, i) => {
+      const d = new Date();
+      d.setDate(d.getDate() - (span - 1 - i));
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      const log = sleepLogs.find((s) => s.log_date === key);
 
-    return {
-      label: d.toLocaleDateString('en-GB', { weekday: 'short' }),
-      value: log ? log.hours + log.minutes / 60 : 0,
-    };
-  });
+      return {
+        label: d.toLocaleDateString('en-GB', { weekday: 'short' }),
+        value: log?.hours ?? 0,
+      };
+    });
+  }, [sleepLogs, range]);
 
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
 
         <View style={styles.header}>
-          <Text style={styles.logo}>✦ Knowtrients</Text>
+          <View style={styles.brandRow}>
+            <View style={styles.logoBadge}>
+              <Text style={styles.logoGlyph}>✦</Text>
+            </View>
+            <Text style={styles.logo}>Knowtrients</Text>
+          </View>
+
           <TouchableOpacity onPress={() => router.push('/account/account')}>
             <Ionicons name="person-circle" size={32} color="#48DDB0" />
           </TouchableOpacity>
         </View>
+        <View style={styles.divider} />
 
         <Text style={styles.title}>Overall Sleep Statistics</Text>
 
@@ -103,44 +140,46 @@ export default function SleepStatistics() {
           {showRange && (
             <View style={styles.rangeMenu}>
               {available.map((r) => (
-                <TouchableOpacity
-                  key={r.id}
-                  onPress={() => {
-                    setRange(r);
-                    setShowRange(false);
-                  }}
-                >
+                <TouchableOpacity key={r.id} onPress={() => selectRange(r)}>
                   <Text style={styles.rangeOption}>{r.label}</Text>
                 </TouchableOpacity>
               ))}
             </View>
           )}
 
-          <Text style={styles.avgLine}>Average bedtime: {avgTime('sleepTime')}</Text>
-          <Text style={styles.avgLine}>Average wake-up time: {avgTime('wakeTime')}</Text>
+          <Text style={styles.avgLine}>Average bedtime: {avgTime('bedtime')}</Text>
+          <Text style={styles.avgLine}>Average wake-up time: {avgTime('wake_time')}</Text>
 
-          <View style={styles.chartArea}>
-            {[10, 8, 6, 4, 2, 0].map((tick) => (
-              <View key={tick} style={[styles.gridRow, { bottom: (tick / MAX_HOURS) * 140 + 24 }]}>
-                <Text style={styles.gridLabel}>{tick}</Text>
-                <View style={styles.gridLine} />
-              </View>
-            ))}
-
-            <View style={styles.chartRow}>
-              {chart.map((d, i) => (
-                <View key={i} style={styles.chartColumn}>
-                  <View
-                    style={[
-                      styles.chartBar,
-                      { height: Math.min(d.value / MAX_HOURS, 1) * 140 },
-                    ]}
-                  />
-                  <Text style={styles.chartLabel}>{d.label}</Text>
+          {isLoading && sleepLogs.length === 0 ? (
+            <ActivityIndicator size="small" color="#4ECBA0" style={{ marginVertical: 40 }} />
+          ) : (
+            <View style={styles.chartArea}>
+              {[10, 8, 6, 4, 2, 0].map((tick) => (
+                <View key={tick} style={[styles.gridRow, { bottom: (tick / MAX_HOURS) * 140 + 24 }]}>
+                  <Text style={styles.gridLabel}>{tick}</Text>
+                  <View style={styles.gridLine} />
                 </View>
               ))}
+
+              <View style={styles.chartRow}>
+                {chart.map((d, i) => (
+                  <View key={i} style={styles.chartColumn}>
+                    <View
+                      style={[
+                        styles.chartBar,
+                        { height: Math.min(d.value / MAX_HOURS, 1) * 140 },
+                      ]}
+                    />
+                    <Text style={styles.chartLabel}>{d.label}</Text>
+                  </View>
+                ))}
+              </View>
             </View>
-          </View>
+          )}
+
+          {!isLoading && sleepLogs.length === 0 && (
+            <Text style={styles.empty}>No sleep logged yet.</Text>
+          )}
         </View>
 
       </ScrollView>
@@ -156,11 +195,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 25,
-    paddingVertical: 20,
+    paddingVertical: 16,
   },
 
-  logo: { color: '#fff', fontSize: 20, fontFamily: 'serif' },
+  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
 
+  logoBadge: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    backgroundColor: '#48DDB0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  logoGlyph: { fontSize: 15, color: '#00382B' },
+
+  logo: { color: '#fff', fontSize: 19, fontWeight: '600' },
+
+  divider: { height: 1, backgroundColor: '#123B2F' },
   title: {
     color: '#fff',
     fontSize: 30,
@@ -256,4 +309,11 @@ const styles = StyleSheet.create({
   chartBar: { width: 18, backgroundColor: '#4ECBA0', borderRadius: 9 },
 
   chartLabel: { color: '#60766E', fontSize: 10, marginTop: 8 },
+
+  empty: {
+    color: '#60766E',
+    fontSize: 11,
+    textAlign: 'center',
+    marginVertical: 30,
+  },
 });

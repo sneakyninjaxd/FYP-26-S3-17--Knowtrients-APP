@@ -1,14 +1,15 @@
 import { useSleep } from '@/contexts/sleep-context';
+import { toLogDate } from '@/services/api';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import {
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -44,6 +45,7 @@ export default function AddSleep() {
   const [wake, setWake] = useState({ hour: 7, minute: '00', period: 'am' });
   const [editing, setEditing] = useState('sleep');
   const [notes, setNotes] = useState('');
+  const [saving, setSaving] = useState(false);
 
   // duration, wrapping past midnight
   const start = toMinutes(sleep);
@@ -63,16 +65,31 @@ export default function AddSleep() {
     return `${String(h).padStart(2, '0')}:${minute}`;
   };
 
-  const handleAdd = () => {
-    addSleep({
-      date: new Date().toISOString().split('T')[0],
-      hours,
-      minutes,
-      sleepTime: pad(sleep),
-      wakeTime: pad(wake),
-      notes,
-    });
-    router.back();
+  /**
+   * The API takes a single decimal `hours`, not an h/m pair, so the total
+   * minutes are converted here. log_date is the wake date — last night's
+   * sleep belongs to today's dashboard.
+   */
+  const handleAdd = async () => {
+    if (saving) return;
+    setSaving(true);
+    try {
+      const saved = await addSleep({
+        date: toLogDate(),
+        hours: Math.round((total / 60) * 100) / 100,
+        bedtime: pad(sleep),
+        wake_time: pad(wake),
+        notes: notes.trim() || null,
+      });
+
+      if (!saved) {
+        alert('Could not save your sleep data. Please try again.');
+        return;
+      }
+      router.back();
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -80,11 +97,18 @@ export default function AddSleep() {
       <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
 
         <View style={styles.header}>
-          <Text style={styles.logo}>✦ Knowtrients</Text>
+          <View style={styles.brandRow}>
+            <View style={styles.logoBadge}>
+              <Text style={styles.logoGlyph}>✦</Text>
+            </View>
+            <Text style={styles.logo}>Knowtrients</Text>
+          </View>
+
           <TouchableOpacity onPress={() => router.push('/account/account')}>
             <Ionicons name="person-circle" size={32} color="#48DDB0" />
           </TouchableOpacity>
         </View>
+        <View style={styles.divider} />
 
         <Text style={styles.title}>Add Sleep Data</Text>
         <Text style={styles.subtitle}>Insert your sleep data for today</Text>
@@ -155,8 +179,12 @@ export default function AddSleep() {
           onChangeText={setNotes}
         />
 
-        <TouchableOpacity style={styles.submit} onPress={handleAdd}>
-          <Text style={styles.submitText}>Add</Text>
+        <TouchableOpacity
+          style={[styles.submit, saving && styles.submitDisabled]}
+          onPress={handleAdd}
+          disabled={saving}
+        >
+          <Text style={styles.submitText}>{saving ? 'Saving…' : 'Add'}</Text>
         </TouchableOpacity>
 
       </ScrollView>
@@ -172,11 +200,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 25,
-    paddingVertical: 20,
+    paddingVertical: 16,
   },
 
-  logo: { color: '#fff', fontSize: 20, fontFamily: 'serif' },
+  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
 
+  logoBadge: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    backgroundColor: '#48DDB0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  logoGlyph: { fontSize: 15, color: '#00382B' },
+
+  logo: { color: '#fff', fontSize: 19, fontWeight: '600' },
+
+  divider: { height: 1, backgroundColor: '#123B2F' },
   title: {
     color: '#fff',
     fontSize: 32,
@@ -286,6 +328,8 @@ const styles = StyleSheet.create({
     marginHorizontal: 60,
     marginTop: 50,
   },
+
+  submitDisabled: { opacity: 0.6 },
 
   submitText: { color: '#00382B', fontSize: 15, fontWeight: '600' },
 });

@@ -1,13 +1,15 @@
 import { useFood } from '@/contexts/food-context';
+import { toLogDate } from '@/services/api';
 import { Ionicons } from '@expo/vector-icons';
-import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
 import {
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -22,13 +24,30 @@ const MEAL_NAMES = {
 
 export default function MealLog() {
   const { meal } = useLocalSearchParams();
-  const { entries, updateQuantity, deleteEntry } = useFood();
+  const { entries, isLoading, loadEntries, updateQuantity, deleteEntry } = useFood();
   const [editing, setEditing] = useState(false);
 
-  const today = new Date().toISOString().split('T')[0];
+  // Pick up anything added on the search screen before we navigated back.
+  useFocusEffect(
+    useCallback(() => {
+      loadEntries(toLogDate());
+    }, [loadEntries])
+  );
 
-  const items = entries.filter((e) => e.meal === meal && e.date === today);
-  const total = items.reduce((sum, e) => sum + e.kcalPerUnit * e.quantity, 0);
+  /**
+   * The provider already holds only the active date's entries, so this just
+   * narrows to the meal. Calories on a log row are the computed total for
+   * the portion — don't multiply by quantity again.
+   */
+  const items = useMemo(
+    () => entries.filter((e) => e.meal_type === meal),
+    [entries, meal]
+  );
+
+  const total = useMemo(
+    () => Math.round(items.reduce((sum, e) => sum + (e.calories ?? 0), 0)),
+    [items]
+  );
 
   return (
     <SafeAreaView style={styles.container}>
@@ -51,60 +70,70 @@ export default function MealLog() {
 
         <Text style={styles.sectionLabel}>Food(s)</Text>
 
-        {items.map((item) => (
-          <View key={item.id} style={styles.foodCard}>
-            <View style={styles.foodTop}>
-              <View style={styles.foodInfo}>
-                <Text style={styles.foodName}>{item.name}</Text>
-                <Text style={styles.foodMeta}>
-                  {item.kcalPerUnit} kcal for 1 {item.unit}
-                </Text>
-              </View>
+        {isLoading && items.length === 0 && (
+          <ActivityIndicator size="small" color="#4ECBA0" style={{ marginVertical: 20 }} />
+        )}
 
-              <View style={styles.foodRight}>
-                <View style={styles.kcalPill}>
-                  <Text style={styles.kcalText}>
-                    {item.kcalPerUnit * item.quantity} kcal
+        {items.map((item) => {
+          const perUnit = item.quantity > 0
+            ? Math.round(item.calories / item.quantity)
+            : Math.round(item.calories);
+
+          return (
+            <View key={item.id} style={styles.foodCard}>
+              <View style={styles.foodTop}>
+                <View style={styles.foodInfo}>
+                  <Text style={styles.foodName}>{item.food_name}</Text>
+                  <Text style={styles.foodMeta}>
+                    {perUnit} kcal for 1 {item.unit}
                   </Text>
                 </View>
 
+                <View style={styles.foodRight}>
+                  <View style={styles.kcalPill}>
+                    <Text style={styles.kcalText}>
+                      {Math.round(item.calories)} kcal
+                    </Text>
+                  </View>
+
+                  {editing && (
+                    <TouchableOpacity onPress={() => deleteEntry(item.id)}>
+                      <Ionicons name="trash-outline" size={16} color="#60766E" />
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </View>
+
+              <View style={styles.qtyRow}>
                 {editing && (
-                  <TouchableOpacity onPress={() => deleteEntry(item.id)}>
-                    <Ionicons name="trash-outline" size={16} color="#60766E" />
+                  <TouchableOpacity
+                    style={styles.stepper}
+                    onPress={() => updateQuantity(item.id, item.quantity - 1)}
+                  >
+                    <Text style={styles.stepperText}>−</Text>
                   </TouchableOpacity>
                 )}
+
+                <View style={styles.qtyBox}>
+                  <Text style={styles.qtyText}>{item.quantity}</Text>
+                </View>
+
+                {editing && (
+                  <TouchableOpacity
+                    style={styles.stepper}
+                    onPress={() => updateQuantity(item.id, item.quantity + 1)}
+                  >
+                    <Text style={styles.stepperText}>+</Text>
+                  </TouchableOpacity>
+                )}
+
+                <Text style={styles.unitText}>{item.unit}</Text>
               </View>
             </View>
+          );
+        })}
 
-            <View style={styles.qtyRow}>
-              {editing && (
-                <TouchableOpacity
-                  style={styles.stepper}
-                  onPress={() => updateQuantity(item.id, item.quantity - 1)}
-                >
-                  <Text style={styles.stepperText}>−</Text>
-                </TouchableOpacity>
-              )}
-
-              <View style={styles.qtyBox}>
-                <Text style={styles.qtyText}>{item.quantity}</Text>
-              </View>
-
-              {editing && (
-                <TouchableOpacity
-                  style={styles.stepper}
-                  onPress={() => updateQuantity(item.id, item.quantity + 1)}
-                >
-                  <Text style={styles.stepperText}>+</Text>
-                </TouchableOpacity>
-              )}
-
-              <Text style={styles.unitText}>{item.unit}</Text>
-            </View>
-          </View>
-        ))}
-
-        {items.length === 0 && (
+        {items.length === 0 && !isLoading && (
           <Text style={styles.empty}>Nothing logged for this meal yet.</Text>
         )}
 

@@ -1,8 +1,9 @@
 import { useActivities } from '@/contexts/activity-context';
+import { toLogDate } from '@/services/api';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { router } from 'expo-router';
-import { useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
 import {
   Platform,
   ScrollView,
@@ -14,20 +15,18 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
 
-const GOALS = { steps: 10000, calories: 2500, activeTime: 90 };
+const GOALS = { steps: 10000, calories: 500, activeTime: 90 };
 
-const WEEK = [
-  { label: 'Mon', value: 5000 },
-  { label: 'Tue', value: 4000 },
-  { label: 'Wed', value: 6000 },
-  { label: 'Thu', value: 5000 },
-  { label: 'Fri', value: 7000 },
-  { label: 'Sat', value: 10000 },
-  { label: 'Sun', value: 6000 },
-];
+/**
+ * PLACEHOLDER — the backend has no steps field, so these are sample values
+ * for demonstration. Replace with real data once a steps column exists.
+ */
+const SAMPLE_STEPS_TODAY = 6800;
+const SAMPLE_STEPS_WEEK = [5000, 4000, 6000, 5000, 7000, 10000, 6800];
 
-const MAX = 10000;
-const pct = (value, goal) => Math.min((value / goal) * 100, 100);
+const MAX_STEPS = 10000;
+
+const pct = (value, goal) => (goal > 0 ? Math.min((value / goal) * 100, 100) : 0);
 
 function Ring({ percent, color, radius }) {
   const circumference = 2 * Math.PI * radius;
@@ -44,11 +43,13 @@ function Ring({ percent, color, radius }) {
   );
 }
 
-function Bar({ label, value, goal, unit, color }) {
+function Bar({ label, value, goal, unit, color, sample }) {
   return (
     <View style={styles.barBlock}>
       <View style={styles.barTop}>
-        <Text style={styles.barLabel}>{label}</Text>
+        <Text style={styles.barLabel}>
+          {label}{sample ? <Text style={styles.sampleTag}> · sample</Text> : null}
+        </Text>
         <Text style={styles.barValue}>
           {value}<Text style={styles.barGoal}>/{goal} {unit}</Text>
         </Text>
@@ -61,36 +62,69 @@ function Bar({ label, value, goal, unit, color }) {
 }
 
 export default function Activities() {
-  const { activities, deleteActivity } = useActivities();
+  const { activities, weekly, loadActivities, loadWeek, deleteActivity } = useActivities();
   const [date, setDate] = useState(new Date());
   const [showPicker, setShowPicker] = useState(false);
 
-  const visible = activities.filter(
-    (a) => a.date === date.toISOString().split('T')[0]
+  // Refetch on focus so entries added on the form show up.
+  useFocusEffect(
+    useCallback(() => {
+      loadActivities(toLogDate(date));
+      loadWeek(toLogDate(date));
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [loadActivities, loadWeek])
   );
 
-  const activeTime = visible.reduce(
-    (sum, a) => sum + (parseInt(a.duration) || 0), 0
-  );
+  const selectDate = (selected) => {
+    setDate(selected);
+    loadActivities(toLogDate(selected));
+    loadWeek(toLogDate(selected));
+  };
 
-  const caloriesBurnt = visible.reduce(
-    (sum, a) => sum + (a.calories || 0), 0
-  );
+  const visible = activities;
 
-  const TODAY = { steps: 0, calories: caloriesBurnt, activeTime };
+  const activeTime = visible.reduce((sum, a) => sum + (a.duration_minutes ?? 0), 0);
+  const caloriesBurnt = visible.reduce((sum, a) => sum + (a.calories_burned ?? 0), 0);
+
+  const TODAY = {
+    steps: SAMPLE_STEPS_TODAY,
+    calories: Math.round(caloriesBurnt),
+    activeTime: Math.round(activeTime),
+  };
+
+  /** Steps are sample values; minutes come from the API. */
+  const week = useMemo(
+    () =>
+      Array.from({ length: 7 }, (_, i) => {
+        const d = new Date(date);
+        d.setDate(d.getDate() - (6 - i));
+        const key = toLogDate(d);
+        return {
+          label: d.toLocaleDateString('en-GB', { weekday: 'short' }),
+          steps: SAMPLE_STEPS_WEEK[i],
+          minutes: weekly?.[key] ?? 0,
+        };
+      }),
+    [weekly, date]
+  );
 
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
 
         <View style={styles.header}>
-          <Text style={styles.logo}>✦ Knowtrients</Text>
+          <View style={styles.brandRow}>
+            <View style={styles.logoBadge}>
+              <Text style={styles.logoGlyph}>✦</Text>
+            </View>
+            <Text style={styles.logo}>Knowtrients</Text>
+          </View>
+
           <TouchableOpacity onPress={() => router.push('/account/account')}>
             <Ionicons name="person-circle" size={32} color="#48DDB0" />
           </TouchableOpacity>
         </View>
         <View style={styles.divider} />
-
         <View style={styles.titleRow}>
           <View>
             <Text style={styles.title}>My Activities</Text>
@@ -113,7 +147,7 @@ export default function Activities() {
             maximumDate={new Date()}
             onChange={(event, selected) => {
               setShowPicker(Platform.OS === 'ios');
-              if (selected) setDate(selected);
+              if (selected) selectDate(selected);
             }}
           />
         )}
@@ -135,7 +169,7 @@ export default function Activities() {
               <Text style={styles.cardTitle}>Daily{'\n'}Activities</Text>
 
               <Bar label="Steps" value={TODAY.steps} goal={GOALS.steps}
-                   unit="steps" color="#48DDB0" />
+                   unit="steps" color="#48DDB0" sample />
               <Bar label="Calories Burnt" value={TODAY.calories} goal={GOALS.calories}
                    unit="kcal" color="#2E8B7A" />
               <Bar label="Active Time" value={TODAY.activeTime} goal={GOALS.activeTime}
@@ -166,9 +200,9 @@ export default function Activities() {
         {visible.map((a) => (
           <View key={a.id} style={styles.activityCard}>
             <View style={styles.activityTop}>
-              <View>
-                <Text style={styles.activityName}>{a.name}</Text>
-                <Text style={styles.activityMeta}>{a.type} • {a.time}</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.activityName}>{a.activity_type}</Text>
+                {a.notes ? <Text style={styles.activityMeta}>{a.notes}</Text> : null}
               </View>
               <TouchableOpacity onPress={() => deleteActivity(a.id)}>
                 <Ionicons name="trash-outline" size={18} color="#60766E" />
@@ -177,14 +211,18 @@ export default function Activities() {
 
             <View style={styles.tagRow}>
               <View style={styles.tag}>
-                <Text style={styles.tagText}>{a.duration}</Text>
+                <Text style={styles.tagText}>{a.duration_minutes} min</Text>
               </View>
-              <View style={styles.tag}>
-                <Text style={styles.tagText}>{a.intensity}</Text>
-              </View>
-              <View style={styles.tagActive}>
-                <Text style={styles.tagTextActive}>~{a.calories} kcal</Text>
-              </View>
+              {a.intensity ? (
+                <View style={styles.tag}>
+                  <Text style={styles.tagText}>{a.intensity}</Text>
+                </View>
+              ) : null}
+              {a.calories_burned ? (
+                <View style={styles.tagActive}>
+                  <Text style={styles.tagTextActive}>~{Math.round(a.calories_burned)} kcal</Text>
+                </View>
+              ) : null}
             </View>
           </View>
         ))}
@@ -193,22 +231,30 @@ export default function Activities() {
           <Text style={styles.empty}>No activities logged yet.</Text>
         )}
 
-        {/* Weekly chart */}
+        {/* Weekly steps chart */}
         <View style={styles.chartCard}>
-          <Text style={styles.chartTitle}>Steps over the last 7 days</Text>
+          <Text style={styles.chartTitle}>
+            Steps over the last 7 days
+            <Text style={styles.sampleTag}> · sample data</Text>
+          </Text>
 
           <View style={styles.chartArea}>
             {[10000, 8000, 6000, 4000, 2000, 0].map((tick) => (
-              <View key={tick} style={[styles.gridRow, { bottom: (tick / MAX) * 140 + 24 }]}>
+              <View key={tick} style={[styles.gridRow, { bottom: (tick / MAX_STEPS) * 140 + 24 }]}>
                 <Text style={styles.gridLabel}>{tick / 1000}k</Text>
                 <View style={styles.gridLine} />
               </View>
             ))}
 
             <View style={styles.chartRow}>
-              {WEEK.map((d) => (
+              {week.map((d) => (
                 <View key={d.label} style={styles.chartColumn}>
-                  <View style={[styles.chartBar, { height: (d.value / MAX) * 140 }]} />
+                  <View
+                    style={[
+                      styles.chartBar,
+                      { height: Math.min(d.steps / MAX_STEPS, 1) * 140 },
+                    ]}
+                  />
                   <Text style={styles.chartLabel}>{d.label}</Text>
                 </View>
               ))}
@@ -229,13 +275,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 25,
-    paddingVertical: 20,
+    paddingVertical: 16,
   },
 
-  logo: { color: '#fff', fontSize: 20, fontFamily: 'serif' },
+  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+
+  logoBadge: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    backgroundColor: '#48DDB0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  logoGlyph: { fontSize: 15, color: '#00382B' },
+
+  logo: { color: '#fff', fontSize: 19, fontWeight: '600' },
 
   divider: { height: 1, backgroundColor: '#123B2F' },
-
   titleRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -275,6 +333,8 @@ const styles = StyleSheet.create({
   barGoal: { color: '#60766E', fontSize: 8 },
   barTrack: { height: 5, backgroundColor: '#123B2F', borderRadius: 3 },
   barFill: { height: 5, borderRadius: 3 },
+
+  sampleTag: { color: '#60766E', fontSize: 8, fontStyle: 'italic' },
 
   sectionHeader: {
     flexDirection: 'row',
@@ -329,6 +389,13 @@ const styles = StyleSheet.create({
   },
 
   tagTextActive: { color: '#48DDB0', fontSize: 10 },
+
+  empty: {
+    color: '#60766E',
+    fontSize: 12,
+    textAlign: 'center',
+    marginVertical: 20,
+  },
 
   chartCard: {
     borderWidth: 1,
