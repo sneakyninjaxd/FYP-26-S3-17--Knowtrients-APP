@@ -6,7 +6,7 @@
  * safe to read directly from process.env in app code.
  */
 
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'https://your-app-name.up.railway.app';
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'https://knowtrients-backend-database.onrender.com';
 
 export type ApiUser = {
   id: number;
