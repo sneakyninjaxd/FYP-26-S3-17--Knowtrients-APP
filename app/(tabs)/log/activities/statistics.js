@@ -193,26 +193,8 @@ export default function ActivityStatistics() {
 
             <View style={styles.cardRight}>
               <View style={styles.cardHeader}>
-                <Text style={styles.cardTitle}>Average Score</Text>
-
-                <TouchableOpacity
-                  style={styles.rangePicker}
-                  onPress={() => setShowRanges(!showRanges)}
-                >
-                  <Text style={styles.rangeText}>{range.label}</Text>
-                  <Ionicons name="chevron-down" size={10} color="#00382B" />
-                </TouchableOpacity>
+                  <Text style={styles.cardTitle}>Average Score</Text>
               </View>
-
-              {showRanges && (
-                <View style={styles.rangeMenu}>
-                  {available.map((r) => (
-                    <TouchableOpacity key={r.id} onPress={() => selectRange(r)}>
-                      <Text style={styles.rangeOption}>{r.label}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              )}
 
               <Bar label="Steps" value={average.steps} goal={GOALS.steps}
                    unit="steps" color="#4ECBA0" sample />
@@ -232,8 +214,25 @@ export default function ActivityStatistics() {
         <View style={styles.chartCard}>
           <View style={styles.chartHeader}>
             <Text style={styles.chartTitle}>Activity Chart</Text>
-            <Text style={styles.chartUnit}>% of goal</Text>
+
+          <TouchableOpacity
+            style={styles.rangePicker}
+            onPress={() => setShowRanges(!showRanges)}
+          >
+          <Text style={styles.rangeText}>{range.label}</Text>
+            <Ionicons name="chevron-down" size={10} color="#00382B" />
+          </TouchableOpacity>
           </View>
+
+          {showRanges && (
+            <View style={styles.rangeMenu}>
+              {available.map((r) => (
+            <TouchableOpacity key={r.id} onPress={() => selectRange(r)}>
+            <Text style={styles.rangeOption}>{r.label}</Text>
+            </TouchableOpacity>
+            ))}
+          </View>
+            )}
 
           {/* Legend */}
           <View style={styles.legend}>

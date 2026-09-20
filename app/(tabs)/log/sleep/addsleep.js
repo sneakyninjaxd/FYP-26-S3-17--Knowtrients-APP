@@ -26,15 +26,31 @@ const toMinutes = ({ hour, minute, period }) => {
 
 function TimeColumn({ values, selected, onSelect }) {
   return (
-    <ScrollView style={styles.wheel} showsVerticalScrollIndicator={false}>
-      {values.map((v) => (
-        <TouchableOpacity key={v} onPress={() => onSelect(v)}>
-          <Text style={String(v) === String(selected) ? styles.wheelActive : styles.wheelItem}>
-            {v}
-          </Text>
-        </TouchableOpacity>
-      ))}
-    </ScrollView>
+    <View style={styles.wheel}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        nestedScrollEnabled={true}
+        contentContainerStyle={styles.wheelContent}
+      >
+        {values.map((v) => (
+          <TouchableOpacity
+            key={String(v)}
+            onPress={() => onSelect(v)}
+            style={styles.wheelButton}
+          >
+            <Text
+              style={
+                String(v) === String(selected)
+                  ? styles.wheelActive
+                  : styles.wheelItem
+              }
+            >
+              {v}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+    </View>
   );
 }
 
@@ -94,7 +110,8 @@ export default function AddSleep() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
+      <ScrollView contentContainerStyle={{ paddingBottom: 40 }}
+      nestedScrollEnabled={true}>
 
         <View style={styles.header}>
           <View style={styles.brandRow}>
@@ -265,30 +282,41 @@ const styles = StyleSheet.create({
 
   timeText: { color: '#fff', fontSize: 14 },
 
-  wheelRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 30,
-    height: 130,
-    marginBottom: 20,
-  },
+wheelRow: {
+  flexDirection: 'row',
+  justifyContent: 'center',
+  gap: 30,
+  height: 160,
+  marginBottom: 20,
+},
 
-  wheel: { maxWidth: 60 },
+wheel: {
+  width: 60,
+  height: 160,
+},
 
-  wheelItem: {
-    color: '#3A5049',
-    fontSize: 15,
-    textAlign: 'center',
-    paddingVertical: 6,
-  },
+wheelContent: {
+  paddingVertical: 50,
+},
 
-  wheelActive: {
-    color: '#fff',
-    fontSize: 20,
-    fontWeight: '600',
-    textAlign: 'center',
-    paddingVertical: 6,
-  },
+wheelButton: {
+  height: 32,
+  alignItems: 'center',
+  justifyContent: 'center',
+},
+
+wheelItem: {
+  color: '#3A5049',
+  fontSize: 15,
+  textAlign: 'center',
+},
+
+wheelActive: {
+  color: '#fff',
+  fontSize: 20,
+  fontWeight: '600',
+  textAlign: 'center',
+},
 
   totalBox: {
     borderWidth: 1,
