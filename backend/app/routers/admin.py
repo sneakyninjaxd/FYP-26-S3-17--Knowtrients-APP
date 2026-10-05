@@ -3,9 +3,14 @@ Administrative endpoints backing the companion website's admin area.
 
 Permissions follow the two staff roles the site distinguishes:
 
-* User Admin      — handles accounts and support requests
-* Platform Manager — everything a User Admin can do, plus role changes and
-                     the nutrition catalogue
+* User Admin      — accounts: viewing, suspending, roles, deletion, and the
+                    support request queue
+* Platform Manager — system performance: the nutrition catalogue, fairness
+                     auditing, and platform metrics
+
+The split is by subject matter, not seniority. Neither role outranks the
+other, so account-level authority sits entirely with User Admins even though
+some of those actions are irreversible.
 
 Both are checked explicitly rather than through a single `is_admin` flag, so
 that widening one role's powers later doesn't silently widen the other's.
@@ -19,7 +24,7 @@ from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..database import get_db
-from ..deps import get_current_admin, get_current_platform_manager
+from ..deps import get_current_admin, get_current_user_admin
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -162,12 +167,13 @@ def set_account_status(
     if user.id == current_admin.id and not payload.is_active:
         raise HTTPException(status_code=400, detail="You cannot suspend your own account")
 
-    # A User Admin managing other staff would let one admin disable another;
-    # that escalation belongs with Platform Managers.
-    if user.is_admin and current_admin.role != models.ROLE_PLATFORM_MANAGER:
+    # Staff accounts are still account business, so User Admins handle them.
+    # A Platform Manager suspending an admin would be reaching outside their
+    # remit, and would let one role disable oversight of the other.
+    if user.is_admin and current_admin.role != models.ROLE_USER_ADMIN:
         raise HTTPException(
             status_code=403,
-            detail="Only a Platform Manager can change the status of a staff account",
+            detail="Only a User Admin can change the status of a staff account",
         )
 
     user.is_active = payload.is_active
@@ -181,16 +187,17 @@ def set_account_role(
     user_id: int,
     payload: schemas.RoleUpdate,
     db: Session = Depends(get_db),
-    current_manager: models.User = Depends(get_current_platform_manager),
+    current_admin: models.User = Depends(get_current_user_admin),
 ):
-    """Change an account's role. Platform Managers only."""
+    """Change an account's role. User Admins only."""
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if user is None:
         raise HTTPException(status_code=404, detail="Account not found")
 
-    if user.id == current_manager.id and payload.role != models.ROLE_PLATFORM_MANAGER:
+    # Demoting yourself would leave nobody able to promote anyone back.
+    if user.id == current_admin.id and payload.role != models.ROLE_USER_ADMIN:
         raise HTTPException(
-            status_code=400, detail="You cannot remove your own Platform Manager role"
+            status_code=400, detail="You cannot remove your own User Admin role"
         )
 
     user.role = payload.role
@@ -203,18 +210,18 @@ def set_account_role(
 def delete_account(
     user_id: int,
     db: Session = Depends(get_db),
-    current_manager: models.User = Depends(get_current_platform_manager),
+    current_admin: models.User = Depends(get_current_user_admin),
 ):
     """
     Permanently delete an account and everything belonging to it.
 
-    Platform Managers only, and irreversible — cascades remove profile, logs
-    and recommendation history.
+    User Admins only, and irreversible — cascades remove profile, logs and
+    recommendation history.
     """
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if user is None:
         raise HTTPException(status_code=404, detail="Account not found")
-    if user.id == current_manager.id:
+    if user.id == current_admin.id:
         raise HTTPException(status_code=400, detail="You cannot delete your own account")
 
     db.delete(user)

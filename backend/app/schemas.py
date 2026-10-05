@@ -417,3 +417,64 @@ class SupportRequestResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# ---------------------------------------------------------------------------
+# Platform Manager — catalogue and metrics
+# ---------------------------------------------------------------------------
+
+
+class FoodUpsert(BaseModel):
+    """Create or correct a catalogue entry. Values are per 100 g / 100 ml."""
+
+    name: str = Field(min_length=1, max_length=200)
+    brand: str | None = None
+    serving_description: str | None = None
+    serving_grams: float | None = Field(default=None, gt=0, le=5000)
+
+    calories: float = Field(default=0, ge=0)
+    protein_g: float = Field(default=0, ge=0)
+    carbs_g: float = Field(default=0, ge=0)
+    fat_g: float = Field(default=0, ge=0)
+    saturated_fat_g: float = Field(default=0, ge=0)
+    fiber_g: float = Field(default=0, ge=0)
+    sugar_g: float = Field(default=0, ge=0)
+    sodium_mg: float = Field(default=0, ge=0)
+    vegetable_servings: float = Field(default=0, ge=0)
+
+    source: str | None = None
+    source_ref: str | None = None
+    is_verified: bool = False
+
+
+class RecommendationCount(BaseModel):
+    recommendation: str
+    count: int
+
+
+class PlatformMetrics(BaseModel):
+    period_days: int
+    total_foods: int = 0
+    unverified_foods: int = 0
+    recommendations_served: int = 0
+    mean_confidence: float = 0.0
+    low_confidence_count: int = 0
+    recommendation_distribution: list[RecommendationCount] = []
+    active_loggers: int = 0
+    total_food_logs: int = 0
+    logging_rate: float = 0.0
+
+
+class FairnessGroup(BaseModel):
+    group: str
+    count: int
+    mean_confidence: float
+    distribution: list[RecommendationCount] = []
+
+
+class FairnessReport(BaseModel):
+    period_days: int
+    total_recommendations: int = 0
+    by_age: list[FairnessGroup] = []
+    by_bmi: list[FairnessGroup] = []
+    caveat: str
