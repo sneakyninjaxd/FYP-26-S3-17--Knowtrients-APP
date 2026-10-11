@@ -1,348 +1,295 @@
-import { useAuth } from '@/contexts/auth-context';
-import { useProfile } from '@/contexts/profile-context';
-import { buildReportHtml, gatherReportData } from '@/src/report';
-import { Ionicons } from '@expo/vector-icons';
-import * as Print from 'expo-print';
-import { router } from 'expo-router';
-import * as Sharing from 'expo-sharing';
-import { useState } from 'react';
-import {
-    Modal,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+/**
+ * Health report — assembles logged data into printable HTML.
+ *
+ * Charts are inline SVG rather than images: expo-print renders them
+ * natively in the PDF, so there's nothing to upload or encode.
+ */
+import { api, toLogDate } from '@/services/api';
+import { readRange } from '@/src/health';
 
-const REPORT_SECTIONS = [
-  { id: 'profile', label: 'My Profiles' },
-  { id: 'progress', label: 'My Progress Data' },
-];
+const DEFAULT_DAYS = 30;
 
-export default function Profile() {
-  const { token, user } = useAuth();
-  const { profile } = useProfile();
-  const isPremium = profile.plan === 'premium';
+const BRAND = '#0F7A5C';
+const INK = '#1A2B25';
+const MUTED = '#6B7F78';
+const RULE = '#D8E4DF';
 
-  const [showReport, setShowReport] = useState(false);
-  const [selected, setSelected] = useState([]);
-
-  const [generating, setGenerating] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [reportError, setReportError] = useState(null);
-
-  const toggleSection = (id) => {
-    setSelected((prev) =>
-      prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]
-    );
-  };
-
-  const openReport = () => {
-    setSelected([]);
-    setProgress(0);
-    setReportError(null);
-    setShowReport(true);
-  };
-
-  /**
-   * Thirty days means roughly sixty API calls, so this is slow — especially
-   * on a cold backend. The progress figure is there to show it hasn't hung.
-   */
-  const downloadReport = async () => {
-    if (!token || !selected.length || generating) return;
-
-    setGenerating(true);
-    setProgress(0);
-    setReportError(null);
-
-    try {
-      const data = await gatherReportData(token, { onProgress: setProgress });
-      const html = buildReportHtml(data, { sections: selected, user });
-
-      const { uri } = await Print.printToFileAsync({ html });
-
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(uri, {
-          mimeType: 'application/pdf',
-          dialogTitle: 'Your Knowtrients health report',
-          UTI: 'com.adobe.pdf',
-        });
-      }
-
-      setShowReport(false);
-    } catch (err) {
-      setReportError(err?.message ?? 'Could not generate the report.');
-    } finally {
-      setGenerating(false);
-    }
-  };
-
-  const generatedAt = new Date().toLocaleString('en-GB', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
+/** Dates for the last N days, oldest first. */
+function recentDates(days = DEFAULT_DAYS) {
+  return Array.from({ length: days }, (_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() - (days - 1 - i));
+    return d;
   });
-
-  return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView>
-
-        <View style={styles.header}>
-          <View style={styles.brandRow}>
-            <View style={styles.logoBadge}>
-              <Text style={styles.logoGlyph}>✦</Text>
-            </View>
-            <Text style={styles.logo}>Knowtrients</Text>
-          </View>
-
-          <TouchableOpacity onPress={() => router.push('/account/account')}>
-            <Ionicons name="person-circle" size={32} color="#48DDB0" />
-          </TouchableOpacity>
-        </View>
-        <View style={styles.divider} />
-
-        <Text style={styles.title}>My Profile</Text>
-        <Text style={styles.subtitle}>View your profile and goals here</Text>
-
-        <TouchableOpacity
-          style={styles.row}
-          onPress={() => router.push('/profile/information')}
-        >
-          <Text style={styles.rowText}>My Information</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.row}
-          onPress={() => router.push('/profile/goals')}
-        >
-          <Text style={styles.rowText}>My Goals</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.row}
-          onPress={() => router.push('/profile/lifestyle')}
-        >
-          <Text style={styles.rowText}>My Lifestyle Preferences</Text>
-        </TouchableOpacity>
-
-        {isPremium && (
-          <TouchableOpacity style={styles.reportButton} onPress={openReport}>
-            <Text style={styles.reportText}>Generate Health Report</Text>
-          </TouchableOpacity>
-        )}
-
-      </ScrollView>
-
-      {/* Health report modal */}
-      <Modal visible={showReport} transparent animationType="fade">
-        <View style={styles.overlay}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>My Health Report</Text>
-            <Text style={styles.modalDate}>Data will be as of {generatedAt}</Text>
-
-            <Text style={styles.modalHelper}>
-              Select what you wish to download. Select all that apply.
-            </Text>
-
-            {REPORT_SECTIONS.map((section) => {
-              const checked = selected.includes(section.id);
-              return (
-                <TouchableOpacity
-                  key={section.id}
-                  onPress={() => toggleSection(section.id)}
-                  style={[styles.optionBox, checked && styles.optionBoxActive]}
-                  disabled={generating}
-                  accessibilityRole="checkbox"
-                  accessibilityState={{ checked }}
-                >
-                  <Text style={checked ? styles.optionTextActive : styles.optionText}>
-                    {section.label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-
-            {reportError && (
-              <Text style={styles.reportError}>{reportError}</Text>
-            )}
-
-            {generating && (
-              <Text style={styles.reportProgress}>
-                Gathering your data… {progress}%
-              </Text>
-            )}
-
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={styles.cancelButton}
-                onPress={() => setShowReport(false)}
-                disabled={generating}
-              >
-                <Text style={styles.cancelText}>Cancel</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={
-                  selected.length && !generating
-                    ? styles.downloadButton
-                    : styles.downloadDisabled
-                }
-                disabled={selected.length === 0 || generating}
-                onPress={downloadReport}
-              >
-                <Text style={selected.length ? styles.downloadText : styles.downloadTextDisabled}>
-                  {generating ? 'Generating…' : 'Download'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-    </SafeAreaView>
-  );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#020D09' },
+const avg = (values) => {
+  const real = values.filter((v) => typeof v === 'number' && !Number.isNaN(v));
+  if (!real.length) return 0;
+  return real.reduce((s, v) => s + v, 0) / real.length;
+};
 
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 25,
-    paddingVertical: 16,
-  },
+const esc = (s) =>
+  String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
 
-  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+/**
+ * A line chart as inline SVG. Days with no data are plotted as zero, which
+ * is honest — a gap would imply the day didn't happen.
+ */
+function lineChart(values, { colour, unit, dates, height = 150 }) {
+  const width = 700;
+  const padL = 46;
+  const padR = 12;
+  const padT = 12;
+  const padB = 26;
 
-  logoBadge: {
-    width: 30,
-    height: 30,
-    borderRadius: 8,
-    backgroundColor: '#48DDB0',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  const max = Math.max(...values, 1);
+  const niceMax = Math.ceil(max / 5) * 5 || 5;
 
-  logoGlyph: { fontSize: 15, color: '#00382B' },
+  const plotW = width - padL - padR;
+  const plotH = height - padT - padB;
 
-  logo: { color: '#fff', fontSize: 19, fontWeight: '600' },
+  const x = (i) => padL + (i / Math.max(values.length - 1, 1)) * plotW;
+  const y = (v) => padT + plotH - (v / niceMax) * plotH;
 
-  divider: { height: 1, backgroundColor: '#123B2F' },
+  const line = values
+    .map((v, i) => `${i === 0 ? 'M' : 'L'} ${x(i).toFixed(1)} ${y(v).toFixed(1)}`)
+    .join(' ');
 
-  title: {
-    color: '#fff',
-    fontSize: 32,
-    fontFamily: 'serif',
-    paddingHorizontal: 25,
-    paddingTop: 20,
-  },
+  const area =
+    `M ${x(0).toFixed(1)} ${(padT + plotH).toFixed(1)} ` +
+    values.map((v, i) => `L ${x(i).toFixed(1)} ${y(v).toFixed(1)}`).join(' ') +
+    ` L ${x(values.length - 1).toFixed(1)} ${(padT + plotH).toFixed(1)} Z`;
 
-  subtitle: {
-    color: '#3AA889',
-    fontSize: 11,
-    paddingHorizontal: 25,
-    marginTop: 4,
-    marginBottom: 20,
-  },
+  const ticks = [0, 0.25, 0.5, 0.75, 1]
+    .map((f) => {
+      const value = Math.round(niceMax * f);
+      const ly = padT + plotH - f * plotH;
+      return `
+      <line x1="${padL}" y1="${ly}" x2="${width - padR}" y2="${ly}"
+            stroke="${RULE}" stroke-width="1" />
+      <text x="${padL - 8}" y="${ly + 3}" text-anchor="end"
+            font-size="9" fill="${MUTED}">${value}</text>`;
+    })
+    .join('');
 
-  row: {
-    borderWidth: 1,
-    borderColor: '#123B2F',
-    borderRadius: 12,
-    paddingVertical: 16,
-    paddingHorizontal: 18,
-    marginHorizontal: 25,
-    marginBottom: 12,
-  },
+  // Label roughly six points so the axis stays readable at any range.
+  const step = Math.max(1, Math.round(values.length / 6));
+  const labels = values
+    .map((_, i) => {
+      if (i % step !== 0 && i !== values.length - 1) return '';
+      const d = dates[i];
+      return `<text x="${x(i).toFixed(1)}" y="${height - 8}" text-anchor="middle"
+                  font-size="8" fill="${MUTED}">${d.getDate()}/${d.getMonth() + 1}</text>`;
+    })
+    .join('');
 
-  rowText: { color: '#3AA889', fontSize: 13 },
+  return `
+    <svg viewBox="0 0 ${width} ${height}" width="100%" height="${height}"
+         xmlns="http://www.w3.org/2000/svg">
+      ${ticks}
+      <path d="${area}" fill="${colour}" fill-opacity="0.12" />
+      <path d="${line}" fill="none" stroke="${colour}" stroke-width="2"
+            stroke-linejoin="round" stroke-linecap="round" />
+      ${labels}
+      <text x="${padL}" y="${padT - 2}" font-size="8" fill="${MUTED}">${unit}</text>
+    </svg>`;
+}
 
-  reportButton: {
-    backgroundColor: '#4ECBA0',
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: 'center',
-    marginHorizontal: 25,
-    marginTop: 20,
-  },
+function chartBlock(title, values, options) {
+  const average = avg(values);
+  return `
+    <section class="chart">
+      <div class="chart-head">
+        <h3>${esc(title)}</h3>
+        <span class="chart-avg">Average: <strong>${Math.round(average)}</strong> ${esc(options.unit)}</span>
+      </div>
+      ${lineChart(values, options)}
+    </section>`;
+}
 
-  reportText: { color: '#00382B', fontSize: 13, fontWeight: '600' },
+/**
+ * Collects everything the report needs. Slow: roughly two API calls per day
+ * in the range, since food and activity have no date-range endpoint.
+ */
+export async function gatherReportData(token, { days = DEFAULT_DAYS, onProgress } = {}) {
+  const dates = recentDates(days);
+  const total = dates.length * 2 + 2;
+  let done = 0;
 
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.75)',
-    justifyContent: 'center',
-    padding: 25,
-  },
+  const tick = () => {
+    done += 1;
+    onProgress?.(Math.round((done / total) * 100));
+  };
 
-  modalCard: {
-    backgroundColor: '#07140F',
-    borderRadius: 16,
-    padding: 22,
-  },
+  const profile = await api.getProfile(token).catch(() => null);
+  tick();
 
-  modalTitle: { color: '#fff', fontSize: 20, fontFamily: 'serif' },
+  const sleepLogs = await api.listSleepLogs(token, days).catch(() => []);
+  tick();
 
-  modalDate: { color: '#D4E6DF', fontSize: 10, marginTop: 6 },
+  const summaries = [];
+  for (const d of dates) {
+    summaries.push(await api.getDailySummary(token, toLogDate(d)).catch(() => null));
+    tick();
+  }
 
-  modalHelper: {
-    color: '#60766E',
-    fontSize: 9,
-    marginTop: 12,
-    marginBottom: 12,
-  },
+  const activityDays = [];
+  for (const d of dates) {
+    const logs = await api.listActivityLogs(token, toLogDate(d)).catch(() => []);
+    activityDays.push(logs.reduce((s, a) => s + (a.duration_minutes ?? 0), 0));
+    tick();
+  }
 
-  optionBox: {
-    borderWidth: 1,
-    borderColor: '#123B2F',
-    borderRadius: 20,
-    paddingVertical: 11,
-    paddingHorizontal: 18,
-    marginBottom: 10,
-  },
+  const health = await readRange(days).catch(() => null);
 
-  optionBoxActive: { borderColor: '#48DDB0' },
+  return { days, dates, profile, sleepLogs, summaries, activityDays, health };
+}
 
-  optionText: { color: '#60766E', fontSize: 12 },
-  optionTextActive: { color: '#48DDB0', fontSize: 12 },
+/** Renders the gathered data as a printable HTML document. */
+export function buildReportHtml(data, { sections, user }) {
+  const { days, dates, profile, sleepLogs, summaries, activityDays, health } = data;
 
-  reportError: { color: '#E07A5F', fontSize: 10, marginTop: 6 },
-  reportProgress: { color: '#48DDB0', fontSize: 10, marginTop: 6 },
+  const calories = summaries.map((s) => Math.round(s?.totals?.calories ?? 0));
+  const steps = dates.map((_, i) => health?.[i]?.steps ?? 0);
+  const sleepByDate = new Map((sleepLogs ?? []).map((s) => [s.log_date, s.hours]));
+  const sleep = dates.map((d) => sleepByDate.get(toLogDate(d)) ?? 0);
 
-  modalButtons: { flexDirection: 'row', gap: 12, marginTop: 12 },
+  const rangeLabel = days === 7 ? 'last 7 days' : `last ${days} days`;
 
-  cancelButton: {
-    flex: 1,
-    backgroundColor: '#0A1A14',
-    borderRadius: 8,
-    paddingVertical: 13,
-    alignItems: 'center',
-  },
+  const generatedAt = new Date().toLocaleString('en-GB', {
+    day: 'numeric', month: 'long', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  });
 
-  cancelText: { color: '#fff', fontSize: 13 },
+  const name = [user?.first_name, user?.last_name].filter(Boolean).join(' ') || 'User';
 
-  downloadButton: {
-    flex: 1,
-    backgroundColor: '#4ECBA0',
-    borderRadius: 8,
-    paddingVertical: 13,
-    alignItems: 'center',
-  },
+  const profileRows = profile
+    ? [
+        ['Age', profile.age != null ? `${Math.round(profile.age)} years` : '—'],
+        ['Gender', profile.gender ?? '—'],
+        ['Height', profile.height_cm ? `${profile.height_cm} cm` : '—'],
+        ['Weight', profile.weight_kg ? `${profile.weight_kg} kg` : '—'],
+        ['BMI', profile.bmi != null ? profile.bmi.toFixed(1) : '—'],
+        ['Target weight', profile.target_weight_kg ? `${profile.target_weight_kg} kg` : '—'],
+        ['Activity level', profile.activity_level ?? '—'],
+        ['Goals', profile.goals?.length ? profile.goals.join(', ') : '—'],
+        ['Dietary preferences', profile.dietary_preferences?.length
+          ? profile.dietary_preferences.join(', ') : '—'],
+        ['Health conditions', profile.health_conditions?.length
+          ? profile.health_conditions.join(', ') : '—'],
+      ]
+    : [];
 
-  downloadDisabled: {
-    flex: 1,
-    backgroundColor: '#123B2F',
-    borderRadius: 8,
-    paddingVertical: 13,
-    alignItems: 'center',
-  },
+  const profileSection = sections.includes('profile')
+    ? `
+      <section class="block">
+        <h2>Profile</h2>
+        <table class="kv">
+          ${profileRows.map(([k, v]) =>
+            `<tr><th>${esc(k)}</th><td>${esc(v)}</td></tr>`).join('')}
+        </table>
+      </section>`
+    : '';
 
-  downloadText: { color: '#00382B', fontSize: 13, fontWeight: '600' },
-  downloadTextDisabled: { color: '#3A5049', fontSize: 13, fontWeight: '600' },
-});
+  const progressSection = sections.includes('progress')
+    ? `
+      <section class="block">
+        <h2>Progress — ${esc(rangeLabel)}</h2>
+        ${chartBlock('Calorie intake', calories, { colour: '#0F7A5C', unit: 'kcal', dates })}
+        ${chartBlock('Steps', steps, { colour: '#2E6FA8', unit: 'steps', dates })}
+        ${chartBlock('Sleep', sleep, { colour: '#7B5BD4', unit: 'hours', dates })}
+        ${chartBlock('Active time', activityDays, { colour: '#C77D3A', unit: 'minutes', dates })}
+      </section>`
+    : '';
+
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      @page { margin: 32px; }
+      body {
+        font-family: -apple-system, Roboto, 'Helvetica Neue', sans-serif;
+        color: ${INK};
+        font-size: 11px;
+        line-height: 1.5;
+      }
+      header {
+        border-bottom: 2px solid ${BRAND};
+        padding-bottom: 12px;
+        margin-bottom: 20px;
+      }
+      .brand { color: ${BRAND}; font-size: 18px; font-weight: 700; }
+      h1 { font-size: 22px; margin: 10px 0 2px; }
+      .meta { color: ${MUTED}; font-size: 10px; }
+      h2 {
+        font-size: 14px;
+        color: ${BRAND};
+        border-bottom: 1px solid ${RULE};
+        padding-bottom: 5px;
+        margin: 24px 0 12px;
+      }
+      h3 { font-size: 11px; margin: 0; }
+      .block { page-break-inside: avoid; }
+      table.kv { width: 100%; border-collapse: collapse; }
+      table.kv th {
+        text-align: left;
+        font-weight: 500;
+        color: ${MUTED};
+        width: 38%;
+        padding: 5px 0;
+        border-bottom: 1px solid ${RULE};
+        vertical-align: top;
+      }
+      table.kv td {
+        padding: 5px 0;
+        border-bottom: 1px solid ${RULE};
+      }
+      .chart { margin-bottom: 22px; page-break-inside: avoid; }
+      .chart-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        margin-bottom: 4px;
+      }
+      .chart-avg { font-size: 9px; color: ${MUTED}; }
+      .note {
+        margin-top: 26px;
+        padding: 12px;
+        background: #F2F7F5;
+        border-left: 3px solid ${BRAND};
+        font-size: 9px;
+        color: ${MUTED};
+        line-height: 1.6;
+      }
+      .note strong { color: ${INK}; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="brand">&#10022; Knowtrients</div>
+      <h1>Health Report</h1>
+      <div class="meta">${esc(name)} &middot; generated ${esc(generatedAt)}</div>
+    </header>
+
+    ${profileSection}
+    ${progressSection}
+
+    <section class="note">
+      <strong>About this report.</strong>
+      This document summarises data you logged in Knowtrients over the
+      ${esc(rangeLabel)}. Food entries and portion sizes are self-reported, so
+      nutrition figures are estimates. Step and activity data is read from
+      Health Connect and depends on which apps or devices you have connected;
+      days before you connected a source will show as zero.
+      Knowtrients&rsquo; recommendations consider nutrition and hydration only
+      &mdash; they do not account for sleep or exercise.
+      <br /><br />
+      <strong>This is not a medical record.</strong> Knowtrients is a student
+      project and does not provide medical advice. Please consult a qualified
+      healthcare professional before making decisions about your health.
+    </section>
+  </body>
+</html>`;
+}
