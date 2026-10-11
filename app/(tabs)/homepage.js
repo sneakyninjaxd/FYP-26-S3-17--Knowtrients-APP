@@ -3,6 +3,7 @@ import { useFood } from '@/contexts/food-context';
 import { useProfile } from '@/contexts/profile-context';
 import { api, toLogDate } from '@/services/api';
 import { dailyGoals } from '@/src/goals';
+import { initHealth, readDay } from '@/src/health';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
@@ -17,9 +18,6 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import Svg, { Circle } from 'react-native-svg';
 
 const GOALS = { steps: 10000, sleep: 8, activeTime: 90 };
-
-/** PLACEHOLDER — the backend has no steps field. Delete once one exists. */
-const SAMPLE_STEPS = 6800;
 
 /** Hardcoded: sleep isn't one of the model's ten features. */
 const SLEEP_INSIGHT = {
@@ -45,13 +43,11 @@ const ACTIVITY_INSIGHT = {
 
 const pct = (value, goal) => (goal > 0 ? Math.min((value / goal) * 100, 100) : 0);
 
-function Bar({ label, value, goal, unit, color, sample }) {
+function Bar({ label, value, goal, unit, color }) {
   return (
     <View style={styles.barBlock}>
       <View style={styles.barTop}>
-        <Text style={[styles.barLabel, { color }]}>
-          {label}{sample ? <Text style={styles.sampleTag}> · sample</Text> : null}
-        </Text>
+        <Text style={[styles.barLabel, { color }]}>{label}</Text>
         <Text style={styles.barValue}>
           {value}<Text style={styles.barGoal}>/{goal} {unit}</Text>
         </Text>
@@ -73,6 +69,9 @@ export default function Homepage() {
 
   const [rec, setRec] = useState(null);
 
+  /** Steps from Health Connect; null until the first read completes. */
+  const [health, setHealth] = useState(null);
+
   useFocusEffect(
     useCallback(() => {
       loadSummary(toLogDate());
@@ -84,6 +83,10 @@ export default function Homepage() {
           .then(setRec)
           .catch(() => setRec(null));
       }
+
+      (async () => {
+        if ((await initHealth()) === 'ready') setHealth(await readDay());
+      })();
     }, [loadSummary, token])
   );
 
@@ -91,7 +94,7 @@ export default function Homepage() {
 
   const TODAY = {
     calories: Math.round(summary?.totals?.calories ?? 0),
-    steps: SAMPLE_STEPS,
+    steps: health?.steps ?? 0,
     sleep: summary?.sleep_hours != null ? Math.round(summary.sleep_hours * 10) / 10 : 0,
     activeTime: Math.round(summary?.activity_minutes ?? 0),
   };
@@ -142,7 +145,6 @@ export default function Homepage() {
           </TouchableOpacity>
         </View>
         <View style={styles.divider} />
-        <View style={styles.divider} />
 
         <Text style={styles.date}>
           {new Date().toLocaleDateString('en-GB', {
@@ -184,7 +186,7 @@ export default function Homepage() {
               <Bar label="Calories Intake" value={TODAY.calories} goal={goals.calories}
                    unit="kcal" color="#48DDB0" />
               <Bar label="Steps" value={TODAY.steps} goal={GOALS.steps}
-                   unit="steps" color="#3A9BD9" sample />
+                   unit="steps" color="#3A9BD9" />
               <Bar label="Sleep Hours" value={TODAY.sleep} goal={GOALS.sleep}
                    unit="hours" color="#A05BD4" />
               <Bar label="Active Time" value={TODAY.activeTime} goal={GOALS.activeTime}
@@ -217,7 +219,9 @@ export default function Homepage() {
 }
 
 const styles = StyleSheet.create({
-    header: {
+  container: { flex: 1, backgroundColor: '#020D09' },
+
+  header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -241,7 +245,7 @@ const styles = StyleSheet.create({
   logo: { color: '#fff', fontSize: 19, fontWeight: '600' },
 
   divider: { height: 1, backgroundColor: '#123B2F' },
-  container: { flex: 1, backgroundColor: '#020D09' },
+
   date: {
     color: '#48DDB0',
     fontSize: 11,
@@ -286,8 +290,6 @@ const styles = StyleSheet.create({
   barGoal: { color: '#60766E', fontSize: 7 },
   barTrack: { height: 4, backgroundColor: '#123B2F', borderRadius: 2 },
   barFill: { height: 4, borderRadius: 2 },
-
-  sampleTag: { color: '#60766E', fontSize: 7, fontStyle: 'italic' },
 
   insightCard: {
     borderWidth: 1,

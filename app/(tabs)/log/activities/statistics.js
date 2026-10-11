@@ -1,5 +1,6 @@
 import { useActivities } from '@/contexts/activity-context';
 import { useProfile } from '@/contexts/profile-context';
+import { initHealth, readRange } from '@/src/health';
 import { RANGES } from '@/src/ranges';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
@@ -16,13 +17,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
 
 const GOALS = { steps: 10000, calories: 500, activeTime: 90 };
-
-/**
- * PLACEHOLDER — the backend has no steps field, so these are sample values
- * for demonstration. Delete once a steps column exists.
- */
-const SAMPLE_AVG_STEPS = 9200;
-const SAMPLE_STEPS_WEEK = [5000, 4000, 6000, 5000, 7000, 10000, 6800];
 
 /** The chart only has room for this many bars, whatever the range. */
 const MAX_BARS = 7;
@@ -54,13 +48,11 @@ function Ring({ percent, color, radius }) {
   );
 }
 
-function Bar({ label, value, goal, unit, color, sample }) {
+function Bar({ label, value, goal, unit, color }) {
   return (
     <View style={styles.barBlock}>
       <View style={styles.barTop}>
-        <Text style={[styles.barLabel, { color }]}>
-          {label}{sample ? <Text style={styles.sampleTag}> · sample</Text> : null}
-        </Text>
+        <Text style={[styles.barLabel, { color }]}>{label}</Text>
         <Text style={styles.barValue}>
           {value}<Text style={styles.barGoal}>/{goal} {unit}</Text>
         </Text>
@@ -89,13 +81,21 @@ export default function ActivityStatistics() {
   const [range, setRange] = useState(available[0]);
   const [showRanges, setShowRanges] = useState(false);
   const [rows, setRows] = useState([]);
+  const [healthRows, setHealthRows] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
 
+  /** Minutes come from the API, steps and burned calories from the device. */
   const fetchRange = useCallback(
     async (r) => {
       setIsLoading(true);
       try {
-        setRows(await loadRange(r.days));
+        const [apiRows, hcRows] = await Promise.all([
+          loadRange(r.days),
+          (async () =>
+            (await initHealth()) === 'ready' ? readRange(r.days) : null)(),
+        ]);
+        setRows(apiRows);
+        setHealthRows(hcRows);
       } finally {
         setIsLoading(false);
       }
@@ -118,15 +118,28 @@ export default function ActivityStatistics() {
 
   /** Averaged across every day in the range, including days with nothing. */
   const average = useMemo(() => {
-    if (!rows.length) return { steps: SAMPLE_AVG_STEPS, calories: 0, activeTime: 0 };
+    const steps = healthRows?.length
+      ? Math.round(
+          healthRows.reduce((s, d) => s + (d?.steps ?? 0), 0) / healthRows.length
+        )
+      : 0;
+
+    if (!rows.length) return { steps, calories: 0, activeTime: 0 };
+
     const minutes = rows.reduce((s, r) => s + r.minutes, 0) / rows.length;
-    const calories = rows.reduce((s, r) => s + r.calories, 0) / rows.length;
+
+    // Prefer the device's burn figure where it has one.
+    const deviceCalories = healthRows?.length
+      ? healthRows.reduce((s, d) => s + (d?.calories ?? 0), 0) / healthRows.length
+      : 0;
+    const loggedCalories = rows.reduce((s, r) => s + r.calories, 0) / rows.length;
+
     return {
-      steps: SAMPLE_AVG_STEPS,
-      calories: Math.round(calories),
+      steps,
+      calories: Math.round(deviceCalories || loggedCalories),
       activeTime: Math.round(minutes),
     };
-  }, [rows]);
+  }, [rows, healthRows]);
 
   const score = Math.round(
     (pct(average.steps, GOALS.steps) +
@@ -140,16 +153,18 @@ export default function ActivityStatistics() {
    */
   const chart = useMemo(() => {
     const recent = rows.slice(-MAX_BARS);
+    const recentHealth = healthRows?.slice(-MAX_BARS) ?? [];
+
     return recent.map((r, i) => {
       const d = new Date(r.date);
       return {
         label: d.toLocaleDateString('en-GB', { weekday: 'short' }),
-        steps: pct(SAMPLE_STEPS_WEEK[i] ?? 0, GOALS.steps),
-        calories: pct(r.calories, GOALS.calories),
+        steps: pct(recentHealth[i]?.steps ?? 0, GOALS.steps),
+        calories: pct(recentHealth[i]?.calories || r.calories, GOALS.calories),
         activeTime: pct(r.minutes, GOALS.activeTime),
       };
     });
-  }, [rows]);
+  }, [rows, healthRows]);
 
   const activeDays = rows.filter((r) => r.count > 0).length;
 
@@ -170,6 +185,7 @@ export default function ActivityStatistics() {
           </TouchableOpacity>
         </View>
         <View style={styles.divider} />
+
         <Text style={styles.title}>Overall Activity Statistics</Text>
 
         {/* Average score card */}
@@ -193,11 +209,11 @@ export default function ActivityStatistics() {
 
             <View style={styles.cardRight}>
               <View style={styles.cardHeader}>
-                  <Text style={styles.cardTitle}>Average Score</Text>
+                <Text style={styles.cardTitle}>Average Score</Text>
               </View>
 
               <Bar label="Steps" value={average.steps} goal={GOALS.steps}
-                   unit="steps" color="#4ECBA0" sample />
+                   unit="steps" color="#4ECBA0" />
               <Bar label="Calories Burnt" value={average.calories} goal={GOALS.calories}
                    unit="kcal" color="#2E8B7A" />
               <Bar label="Active Time" value={average.activeTime} goal={GOALS.activeTime}
@@ -215,33 +231,31 @@ export default function ActivityStatistics() {
           <View style={styles.chartHeader}>
             <Text style={styles.chartTitle}>Activity Chart</Text>
 
-          <TouchableOpacity
-            style={styles.rangePicker}
-            onPress={() => setShowRanges(!showRanges)}
-          >
-          <Text style={styles.rangeText}>{range.label}</Text>
-            <Ionicons name="chevron-down" size={10} color="#00382B" />
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.rangePicker}
+              onPress={() => setShowRanges(!showRanges)}
+            >
+              <Text style={styles.rangeText}>{range.label}</Text>
+              <Ionicons name="chevron-down" size={10} color="#00382B" />
+            </TouchableOpacity>
           </View>
 
           {showRanges && (
             <View style={styles.rangeMenu}>
               {available.map((r) => (
-            <TouchableOpacity key={r.id} onPress={() => selectRange(r)}>
-            <Text style={styles.rangeOption}>{r.label}</Text>
-            </TouchableOpacity>
-            ))}
-          </View>
-            )}
+                <TouchableOpacity key={r.id} onPress={() => selectRange(r)}>
+                  <Text style={styles.rangeOption}>{r.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
 
           {/* Legend */}
           <View style={styles.legend}>
             {SERIES.map((s) => (
               <View key={s.key} style={styles.legendItem}>
                 <View style={[styles.legendDot, { backgroundColor: s.color }]} />
-                <Text style={styles.legendText}>
-                  {s.label}{s.key === 'steps' ? ' (sample)' : ''}
-                </Text>
+                <Text style={styles.legendText}>{s.label}</Text>
               </View>
             ))}
           </View>
@@ -321,11 +335,13 @@ const styles = StyleSheet.create({
   logo: { color: '#fff', fontSize: 19, fontWeight: '600' },
 
   divider: { height: 1, backgroundColor: '#123B2F' },
+
   title: {
     color: '#fff',
     fontSize: 26,
     fontFamily: 'serif',
     paddingHorizontal: 25,
+    paddingTop: 20,
     marginBottom: 20,
   },
 
@@ -370,7 +386,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#0A1A14',
     borderRadius: 8,
     padding: 8,
-    marginBottom: 10,
+    marginTop: 8,
+    marginBottom: 2,
   },
 
   rangeOption: { color: '#D4E6DF', fontSize: 10, paddingVertical: 5 },
@@ -382,8 +399,6 @@ const styles = StyleSheet.create({
   barGoal: { color: '#60766E', fontSize: 7 },
   barTrack: { height: 4, backgroundColor: '#123B2F', borderRadius: 2 },
   barFill: { height: 4, borderRadius: 2 },
-
-  sampleTag: { color: '#60766E', fontSize: 7, fontStyle: 'italic' },
 
   meta: { color: '#60766E', fontSize: 8, marginTop: 2 },
 
@@ -402,7 +417,6 @@ const styles = StyleSheet.create({
   },
 
   chartTitle: { color: '#fff', fontSize: 13 },
-  chartUnit: { color: '#60766E', fontSize: 9 },
 
   legend: {
     flexDirection: 'row',

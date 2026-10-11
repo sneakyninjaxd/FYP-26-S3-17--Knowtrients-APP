@@ -11,6 +11,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View
 } from 'react-native';
@@ -39,6 +40,10 @@ export default function Insights() {
   const [feedback, setFeedback] = useState({});
   const [feedbackMessage, setFeedbackMessage] = useState({});
 
+  // "Not helpful" reason prompt
+  const [reasonTarget, setReasonTarget] = useState(null);
+  const [reasonText, setReasonText] = useState('');
+
   const loadRecommendation = useCallback(async () => {
     if (!token) return;
 
@@ -46,16 +51,9 @@ export default function Insights() {
     setError(null);
 
     try {
-      setRec(
-        await api.getTodaysRecommendation(
-          token,
-          toLogDate()
-        )
-      );
+      setRec(await api.getTodaysRecommendation(token, toLogDate()));
     } catch (err) {
-      setError(
-        err?.message ?? 'Could not load your recommendation.'
-      );
+      setError(err?.message ?? 'Could not load your recommendation.');
       setRec(null);
     } finally {
       setIsLoading(false);
@@ -74,16 +72,12 @@ export default function Insights() {
   };
 
   /**
-   * Submit feedback.
-   *
-   * Currently this stores the feedback locally.
-   * You can connect this to your FastAPI backend later.
+   * Records feedback for one recommendation. Thumbs down arrives here only
+   * after the user has given a reason — an unexplained negative tells us
+   * nothing useful.
    */
-  const giveFeedback = (recommendationId, type) => {
-    setFeedback((prev) => ({
-      ...prev,
-      [recommendationId]: type,
-    }));
+  const giveFeedback = (recommendationId, type, reason = '') => {
+    setFeedback((prev) => ({ ...prev, [recommendationId]: type }));
 
     setFeedbackMessage((prev) => ({
       ...prev,
@@ -93,50 +87,74 @@ export default function Insights() {
           : 'Thanks for your feedback. We’ll use it to improve recommendations.',
     }));
 
-    // TODO: Send feedback to backend
-    //
-    // Example:
+    // TODO: Send feedback to backend — no endpoint exists yet.
     //
     // await api.submitRecommendationFeedback(token, {
     //   recommendationId,
     //   feedback: type,
+    //   reason,
     // });
+  };
+
+  /** Removes the recorded feedback, so a mis-tap can be undone. */
+  const clearFeedback = (recommendationId) => {
+    setFeedback((prev) => {
+      const next = { ...prev };
+      delete next[recommendationId];
+      return next;
+    });
+
+    setFeedbackMessage((prev) => {
+      const next = { ...prev };
+      delete next[recommendationId];
+      return next;
+    });
+
+    // TODO: Withdraw the feedback on the backend once an endpoint exists.
+  };
+
+  /** Toggles thumbs up — a second tap on an active button clears it. */
+  const toggleUp = (recommendationId) => {
+    if (feedback[recommendationId] === 'up') {
+      clearFeedback(recommendationId);
+      return;
+    }
+    giveFeedback(recommendationId, 'up');
+  };
+
+  /** Toggles thumbs down; asks for a reason only when switching it on. */
+  const toggleDown = (recommendationId) => {
+    if (feedback[recommendationId] === 'down') {
+      clearFeedback(recommendationId);
+      return;
+    }
+    setReasonText('');
+    setReasonTarget(recommendationId);
+  };
+
+  const submitReason = () => {
+    giveFeedback(reasonTarget, 'down', reasonText.trim());
+    setReasonTarget(null);
   };
 
   /** Placeholder cards keep their own reasoning fields. */
   const reasoning =
     selected && !selected.fromApi
-      ? (
-          mode === 'technical'
-            ? selected.reasoningTechnical
-            : selected.reasoningSimple
-        ) ?? []
+      ? (mode === 'technical' ? selected.reasoningTechnical : selected.reasoningSimple) ?? []
       : [];
 
   /** Biggest contributors first — that's the point of the SHAP ordering. */
   const factors = rec
-    ? [...rec.factors].sort(
-        (a, b) =>
-          Math.abs(b.contribution) -
-          Math.abs(a.contribution)
-      )
+    ? [...rec.factors].sort((a, b) => Math.abs(b.contribution) - Math.abs(a.contribution))
     : [];
 
   const maxContribution = factors.length
-    ? Math.max(
-        ...factors.map((f) =>
-          Math.abs(f.contribution)
-        )
-      )
+    ? Math.max(...factors.map((f) => Math.abs(f.contribution)))
     : 1;
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView
-        contentContainerStyle={{
-          paddingBottom: 30,
-        }}
-      >
+      <ScrollView contentContainerStyle={{ paddingBottom: 30 }}>
 
         {/* HEADER */}
         <View style={styles.header}>
@@ -144,22 +162,11 @@ export default function Insights() {
             <View style={styles.logoBadge}>
               <Text style={styles.logoGlyph}>✦</Text>
             </View>
-
-            <Text style={styles.logo}>
-              Knowtrients
-            </Text>
+            <Text style={styles.logo}>Knowtrients</Text>
           </View>
 
-          <TouchableOpacity
-            onPress={() =>
-              router.push('/account/account')
-            }
-          >
-            <Ionicons
-              name="person-circle"
-              size={32}
-              color="#48DDB0"
-            />
+          <TouchableOpacity onPress={() => router.push('/account/account')}>
+            <Ionicons name="person-circle" size={32} color="#48DDB0" />
           </TouchableOpacity>
         </View>
 
@@ -168,54 +175,32 @@ export default function Insights() {
         {/* TITLE */}
         <View style={styles.titleRow}>
           <View>
-            <Text style={styles.title}>
-              Insights
-            </Text>
+            <Text style={styles.title}>Insights</Text>
 
             <Text style={styles.date}>
-              {new Date().toLocaleDateString(
-                'en-GB',
-                {
-                  weekday: 'long',
-                  day: 'numeric',
-                  month: 'long',
-                }
-              )}
+              {new Date().toLocaleDateString('en-GB', {
+                weekday: 'long',
+                day: 'numeric',
+                month: 'long',
+              })}
               {', '}
-              {new Date().toLocaleTimeString(
-                'en-GB',
-                {
-                  hour: 'numeric',
-                  minute: '2-digit',
-                }
-              )}
+              {new Date().toLocaleTimeString('en-GB', {
+                hour: 'numeric',
+                minute: '2-digit',
+              })}
             </Text>
           </View>
 
           <TouchableOpacity
-            style={
-              isPremium
-                ? styles.refreshButton
-                : styles.refreshDisabled
-            }
+            style={isPremium ? styles.refreshButton : styles.refreshDisabled}
             disabled={!isPremium || isLoading}
             onPress={loadRecommendation}
           >
             {!isPremium && (
-              <Ionicons
-                name="lock-closed"
-                size={11}
-                color="#3A5049"
-              />
+              <Ionicons name="lock-closed" size={11} color="#3A5049" />
             )}
 
-            <Text
-              style={
-                isPremium
-                  ? styles.refreshText
-                  : styles.refreshTextDisabled
-              }
-            >
+            <Text style={isPremium ? styles.refreshText : styles.refreshTextDisabled}>
               Refresh Insight
             </Text>
           </TouchableOpacity>
@@ -226,66 +211,38 @@ export default function Insights() {
         ===================================================== */}
 
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>
-            Diet &amp; Nutrition
-          </Text>
+          <Text style={styles.cardTitle}>Diet &amp; Nutrition</Text>
 
           {isLoading && !rec && (
             <ActivityIndicator
               size="small"
               color="#4ECBA0"
-              style={{
-                marginVertical: 20,
-              }}
+              style={{ marginVertical: 20 }}
             />
           )}
 
           {error && !isLoading && (
-            <Text style={styles.errorText}>
-              {error}
-            </Text>
+            <Text style={styles.errorText}>{error}</Text>
           )}
 
           {rec && (
             <>
-              <Text style={styles.cardLabel}>
-                Observations
-              </Text>
+              <Text style={styles.cardLabel}>Observations</Text>
 
-              {rec.explanation.map(
-                (line, i) => (
-                  <View
-                    key={i}
-                    style={styles.obsRow}
-                  >
-                    <Ionicons
-                      name="alert-circle"
-                      size={11}
-                      color="#E0A33F"
-                    />
+              {rec.explanation.map((line, i) => (
+                <View key={i} style={styles.obsRow}>
+                  <Ionicons name="alert-circle" size={11} color="#E0A33F" />
+                  <Text style={styles.obsText}>{line}</Text>
+                </View>
+              ))}
 
-                    <Text style={styles.obsText}>
-                      {line}
-                    </Text>
-                  </View>
-                )
-              )}
-
-              <Text style={styles.cardLabel}>
-                Conclusion
-              </Text>
-
-              <Text style={styles.conclusion}>
-                {rec.recommendation}
-              </Text>
+              <Text style={styles.cardLabel}>Conclusion</Text>
+              <Text style={styles.conclusion}>{rec.recommendation}</Text>
 
               <TouchableOpacity
                 style={styles.explainButton}
                 onPress={() =>
-                  openInsight({
-                    fromApi: true,
-                    aspect: 'Diet & Nutrition',
-                  })
+                  openInsight({ fromApi: true, aspect: 'Diet & Nutrition' })
                 }
               >
                 <Text style={styles.explainText}>
@@ -295,86 +252,51 @@ export default function Insights() {
             </>
           )}
 
-          {!rec &&
-            !isLoading &&
-            !error && (
-              <Text style={styles.conclusion}>
-                Log some meals today and your
-                recommendation will appear here.
-              </Text>
-            )}
+          {!rec && !isLoading && !error && (
+            <Text style={styles.conclusion}>
+              Log some meals today and your recommendation will appear here.
+            </Text>
+          )}
         </View>
 
         {/* =====================================================
             OTHER INSIGHTS
         ===================================================== */}
 
-        {PLACEHOLDER_INSIGHTS.map(
-          (insight) => (
-            <View
-              key={insight.id}
-              style={styles.card}
+        {PLACEHOLDER_INSIGHTS.map((insight) => (
+          <View key={insight.id} style={styles.card}>
+            <Text style={styles.cardTitle}>{insight.aspect}</Text>
+
+            <Text style={styles.cardLabel}>Observations</Text>
+
+            {insight.observations.map((obs, i) => (
+              <View key={i} style={styles.obsRow}>
+                <Ionicons
+                  name={obs.icon === 'alert' ? 'alert-circle' : 'warning'}
+                  size={11}
+                  color={obs.icon === 'alert' ? '#E0A33F' : '#C7A03A'}
+                />
+                <Text style={styles.obsText}>{obs.text}</Text>
+              </View>
+            ))}
+
+            {insight.conclusion !== '' && (
+              <>
+                <Text style={styles.cardLabel}>Conclusion</Text>
+                <Text style={styles.conclusion}>{insight.conclusion}</Text>
+              </>
+            )}
+
+            <TouchableOpacity
+              style={styles.explainButton}
+              onPress={() => openInsight(insight)}
             >
-              <Text style={styles.cardTitle}>
-                {insight.aspect}
+              <Text style={styles.explainText}>
+                Click here to view full explanation
               </Text>
-
-              <Text style={styles.cardLabel}>
-                Observations
-              </Text>
-
-              {insight.observations.map(
-                (obs, i) => (
-                  <View
-                    key={i}
-                    style={styles.obsRow}
-                  >
-                    <Ionicons
-                      name={
-                        obs.icon === 'alert'
-                          ? 'alert-circle'
-                          : 'warning'
-                      }
-                      size={11}
-                      color={
-                        obs.icon === 'alert'
-                          ? '#E0A33F'
-                          : '#C7A03A'
-                      }
-                    />
-
-                    <Text style={styles.obsText}>
-                      {obs.text}
-                    </Text>
-                  </View>
-                )
-              )}
-
-              {insight.conclusion !== '' && (
-                <>
-                  <Text style={styles.cardLabel}>
-                    Conclusion
-                  </Text>
-
-                  <Text style={styles.conclusion}>
-                    {insight.conclusion}
-                  </Text>
-                </>
-              )}
-
-              <TouchableOpacity
-                style={styles.explainButton}
-                onPress={() =>
-                  openInsight(insight)
-                }
-              >
-                <Text style={styles.explainText}>
-                  Click here to view full explanation
-                </Text>
-              </TouchableOpacity>
-            </View>
-          )
-        )}
+            </TouchableOpacity>
+          </View>
+        ))}
 
       </ScrollView>
 
@@ -382,17 +304,11 @@ export default function Insights() {
           FULL EXPLANATION POPUP
       ===================================================== */}
 
-      <Modal
-        visible={selected !== null}
-        transparent
-        animationType="fade"
-      >
+      <Modal visible={selected !== null} transparent animationType="fade">
         <View style={styles.overlay}>
           <ScrollView
             style={styles.modalCard}
-            contentContainerStyle={{
-              padding: 20,
-            }}
+            contentContainerStyle={{ padding: 20 }}
           >
 
             {/* =================================================
@@ -402,302 +318,157 @@ export default function Insights() {
             {selected?.fromApi && rec ? (
               <>
                 <View style={styles.modalHeader}>
-                  <Text style={styles.modalAspect}>
-                    {selected.aspect}
-                  </Text>
+                  <Text style={styles.modalAspect}>{selected.aspect}</Text>
 
                   <View style={styles.headerRight}>
-
                     {isPremium && (
                       <View style={styles.modeToggle}>
-                        {[
-                          'simple',
-                          'technical',
-                        ].map((m) => (
-                          <TouchableOpacity
-                            key={m}
-                            onPress={() =>
-                              setMode(m)
-                            }
-                          >
-                            <Text
-                              style={
-                                mode === m
-                                  ? styles.modeActive
-                                  : styles.mode
-                              }
-                            >
-                              {m === 'simple'
-                                ? 'Simple'
-                                : 'Technical'}
+                        {['simple', 'technical'].map((m) => (
+                          <TouchableOpacity key={m} onPress={() => setMode(m)}>
+                            <Text style={mode === m ? styles.modeActive : styles.mode}>
+                              {m === 'simple' ? 'Simple' : 'Technical'}
                             </Text>
                           </TouchableOpacity>
                         ))}
                       </View>
                     )}
 
-                    <Text
-                      style={styles.confidence}
-                    >
-                      Confidence:{' '}
-                      {Math.round(
-                        rec.confidence * 100
-                      )}
-                      %
+                    <Text style={styles.confidence}>
+                      Confidence: {Math.round(rec.confidence * 100)}%
                     </Text>
                   </View>
                 </View>
 
-                <Text style={styles.modalTitle}>
-                  {rec.recommendation}
-                </Text>
+                <Text style={styles.modalTitle}>{rec.recommendation}</Text>
 
                 {/* DATA USED */}
-                <Text style={styles.modalLabel}>
-                  Data Used
-                </Text>
-
+                <Text style={styles.modalLabel}>Data Used</Text>
                 <View style={styles.rule} />
 
                 {factors.map((f) => (
-                  <Text
-                    key={f.feature}
-                    style={styles.modalBody}
-                  >
+                  <Text key={f.feature} style={styles.modalBody}>
                     • {f.label}: {f.value}
                   </Text>
                 ))}
 
                 {/* REASONING */}
-                <Text style={styles.modalLabel}>
-                  Reasoning
-                </Text>
-
+                <Text style={styles.modalLabel}>Reasoning</Text>
                 <View style={styles.rule} />
 
-                {mode === 'technical' &&
-                isPremium ? (
+                {mode === 'technical' && isPremium ? (
                   <>
-                    <Text
-                      style={styles.modalNote}
-                    >
-                      Each bar shows how much
-                      that value pushed the model
-                      toward or away from this
-                      recommendation.
+                    <Text style={styles.modalNote}>
+                      Each bar shows how much that value pushed the model toward
+                      or away from this recommendation.
                     </Text>
 
                     {factors.map((f) => {
                       const width =
-                        (Math.abs(
-                          f.contribution
-                        ) /
-                          maxContribution) *
-                        100;
-
-                      const pushes =
-                        f.contribution >= 0;
+                        (Math.abs(f.contribution) / maxContribution) * 100;
+                      const pushes = f.contribution >= 0;
 
                       return (
-                        <View
-                          key={f.feature}
-                          style={
-                            styles.factorRow
-                          }
-                        >
-                          <Text
-                            style={
-                              styles.factorLabel
-                            }
-                            numberOfLines={1}
-                          >
+                        <View key={f.feature} style={styles.factorRow}>
+                          <Text style={styles.factorLabel} numberOfLines={1}>
                             {f.label}
                           </Text>
 
-                          <View
-                            style={
-                              styles.factorTrack
-                            }
-                          >
+                          <View style={styles.factorTrack}>
                             <View
                               style={[
                                 styles.factorFill,
                                 {
                                   width: `${width}%`,
-                                  backgroundColor:
-                                    pushes
-                                      ? '#4ECBA0'
-                                      : '#D9433F',
+                                  backgroundColor: pushes ? '#4ECBA0' : '#D9433F',
                                 },
                               ]}
                             />
                           </View>
 
-                          <Text
-                            style={
-                              styles.factorValue
-                            }
-                          >
-                            {f.contribution > 0
-                              ? '+'
-                              : ''}
-                            {f.contribution.toFixed(
-                              3
-                            )}
+                          <Text style={styles.factorValue}>
+                            {f.contribution > 0 ? '+' : ''}
+                            {f.contribution.toFixed(3)}
                           </Text>
                         </View>
                       );
                     })}
                   </>
                 ) : (
-                  rec.explanation.map(
-                    (step, i) => (
-                      <Text
-                        key={i}
-                        style={
-                          styles.modalBody
-                        }
-                      >
-                        {i + 1}. {step}
-                      </Text>
-                    )
-                  )
+                  rec.explanation.map((step, i) => (
+                    <Text key={i} style={styles.modalBody}>
+                      {i + 1}. {step}
+                    </Text>
+                  ))
                 )}
 
                 {/* RECOMMENDATION */}
-                <Text style={styles.modalLabel}>
-                  Recommendation
-                </Text>
-
+                <Text style={styles.modalLabel}>Recommendation</Text>
                 <View style={styles.rule} />
-
-                <Text style={styles.modalBody}>
-                  {rec.recommendation}
-                </Text>
+                <Text style={styles.modalBody}>{rec.recommendation}</Text>
 
                 {/* ALTERNATIVE */}
                 {rec.alternative && (
-                  <Text
-                    style={styles.modalFooter}
-                  >
-                    Alternative:{' '}
-                    {
-                      rec.alternative
-                        .recommendation
-                    }{' '}
-                    (
-                    {Math.round(
-                      rec.alternative
-                        .confidence * 100
-                    )}
-                    % confidence)
+                  <Text style={styles.modalFooter}>
+                    Alternative: {rec.alternative.recommendation} (
+                    {Math.round(rec.alternative.confidence * 100)}% confidence)
                   </Text>
                 )}
 
-                {/* =================================================
-                    FEEDBACK
-                ================================================= */}
-
-                <View
-                  style={
-                    styles.feedbackContainer
-                  }
-                >
-                  <Text
-                    style={
-                      styles.feedbackQuestion
-                    }
-                  >
-                    Was this recommendation
-                    helpful?
+                {/* FEEDBACK */}
+                <View style={styles.feedbackContainer}>
+                  <Text style={styles.feedbackQuestion}>
+                    Was this recommendation helpful?
                   </Text>
 
-                  <View
-                    style={
-                      styles.feedbackButtons
-                    }
-                  >
-
-                    {/* THUMBS UP */}
+                  <View style={styles.feedbackButtons}>
                     <TouchableOpacity
                       style={[
                         styles.feedbackButton,
-                        feedback.diet ===
-                          'up' &&
-                          styles.feedbackButtonSelected,
+                        feedback.diet === 'up' && styles.feedbackButtonSelected,
                       ]}
-                      onPress={() =>
-                        giveFeedback(
-                          'diet',
-                          'up'
-                        )
-                      }
+                      onPress={() => toggleUp('diet')}
                     >
                       <Ionicons
                         name={
-                          feedback.diet ===
-                          'up'
+                          feedback.diet === 'up'
                             ? 'thumbs-up'
                             : 'thumbs-up-outline'
                         }
                         size={20}
-                        color={
-                          feedback.diet ===
-                          'up'
-                            ? '#020D09'
-                            : '#48DDB0'
-                        }
+                        color={feedback.diet === 'up' ? '#020D09' : '#48DDB0'}
                       />
 
                       <Text
                         style={[
                           styles.feedbackText,
-                          feedback.diet ===
-                            'up' &&
-                            styles.feedbackTextSelected,
+                          feedback.diet === 'up' && styles.feedbackTextSelected,
                         ]}
                       >
                         Helpful
                       </Text>
                     </TouchableOpacity>
 
-                    {/* THUMBS DOWN */}
                     <TouchableOpacity
                       style={[
                         styles.feedbackButton,
-                        feedback.diet ===
-                          'down' &&
-                          styles.feedbackButtonSelected,
+                        feedback.diet === 'down' && styles.feedbackButtonSelected,
                       ]}
-                      onPress={() =>
-                        giveFeedback(
-                          'diet',
-                          'down'
-                        )
-                      }
+                      onPress={() => toggleDown('diet')}
                     >
                       <Ionicons
                         name={
-                          feedback.diet ===
-                          'down'
+                          feedback.diet === 'down'
                             ? 'thumbs-down'
                             : 'thumbs-down-outline'
                         }
                         size={20}
-                        color={
-                          feedback.diet ===
-                          'down'
-                            ? '#020D09'
-                            : '#E07A5F'
-                        }
+                        color={feedback.diet === 'down' ? '#020D09' : '#E07A5F'}
                       />
 
                       <Text
                         style={[
                           styles.feedbackText,
-                          feedback.diet ===
-                            'down' &&
-                            styles.feedbackTextSelected,
+                          feedback.diet === 'down' && styles.feedbackTextSelected,
                         ]}
                       >
                         Not helpful
@@ -706,26 +477,17 @@ export default function Insights() {
                   </View>
 
                   {feedbackMessage.diet && (
-                    <Text
-                      style={
-                        styles.feedbackMessage
-                      }
-                    >
+                    <Text style={styles.feedbackMessage}>
                       {feedbackMessage.diet}
                     </Text>
                   )}
                 </View>
 
-                {/* CLOSE */}
                 <TouchableOpacity
                   style={styles.closeButton}
-                  onPress={() =>
-                    setSelected(null)
-                  }
+                  onPress={() => setSelected(null)}
                 >
-                  <Text style={styles.closeText}>
-                    Close
-                  </Text>
+                  <Text style={styles.closeText}>Close</Text>
                 </TouchableOpacity>
               </>
             ) : selected ? (
@@ -736,190 +498,94 @@ export default function Insights() {
 
               <>
                 <View style={styles.modalHeader}>
-                  <Text style={styles.modalAspect}>
-                    {selected.aspect}
-                  </Text>
+                  <Text style={styles.modalAspect}>{selected.aspect}</Text>
 
                   <View style={styles.headerRight}>
-
                     {isPremium && (
                       <View style={styles.modeToggle}>
-                        {[
-                          'simple',
-                          'technical',
-                        ].map((m) => (
-                          <TouchableOpacity
-                            key={m}
-                            onPress={() =>
-                              setMode(m)
-                            }
-                          >
-                            <Text
-                              style={
-                                mode === m
-                                  ? styles.modeActive
-                                  : styles.mode
-                              }
-                            >
-                              {m === 'simple'
-                                ? 'Simple'
-                                : 'Technical'}
+                        {['simple', 'technical'].map((m) => (
+                          <TouchableOpacity key={m} onPress={() => setMode(m)}>
+                            <Text style={mode === m ? styles.modeActive : styles.mode}>
+                              {m === 'simple' ? 'Simple' : 'Technical'}
                             </Text>
                           </TouchableOpacity>
                         ))}
                       </View>
                     )}
 
-                    <Text
-                      style={styles.confidence}
-                    >
-                      Confidence:{' '}
-                      {selected.confidence}%
+                    <Text style={styles.confidence}>
+                      Confidence: {selected.confidence}%
                     </Text>
                   </View>
                 </View>
 
-                <Text style={styles.modalTitle}>
-                  {selected.title}
-                </Text>
-
-                <Text
-                  style={styles.modalSummary}
-                >
-                  {selected.summary}
-                </Text>
+                <Text style={styles.modalTitle}>{selected.title}</Text>
+                <Text style={styles.modalSummary}>{selected.summary}</Text>
 
                 {/* OBSERVATION */}
-                <Text style={styles.modalLabel}>
-                  Observation
-                </Text>
-
+                <Text style={styles.modalLabel}>Observation</Text>
                 <View style={styles.rule} />
-
-                <Text style={styles.modalBody}>
-                  {selected.observation}
-                </Text>
+                <Text style={styles.modalBody}>{selected.observation}</Text>
 
                 {/* DATA USED */}
-                <Text style={styles.modalLabel}>
-                  Data Used
-                </Text>
-
+                <Text style={styles.modalLabel}>Data Used</Text>
                 <View style={styles.rule} />
 
-                {selected.dataUsed.map(
-                  (d, i) => (
-                    <Text
-                      key={i}
-                      style={styles.modalBody}
-                    >
-                      • {d}
-                    </Text>
-                  )
-                )}
+                {selected.dataUsed.map((d, i) => (
+                  <Text key={i} style={styles.modalBody}>• {d}</Text>
+                ))}
 
                 {/* REASONING */}
-                <Text style={styles.modalLabel}>
-                  Reasoning
-                </Text>
-
+                <Text style={styles.modalLabel}>Reasoning</Text>
                 <View style={styles.rule} />
 
-                {reasoning.map(
-                  (step, i) => (
-                    <Text
-                      key={i}
-                      style={styles.modalBody}
-                    >
-                      {i + 1}. {step}
-                    </Text>
-                  )
-                )}
+                {reasoning.map((step, i) => (
+                  <Text key={i} style={styles.modalBody}>
+                    {i + 1}. {step}
+                  </Text>
+                ))}
 
                 {/* RECOMMENDATION */}
-                <Text style={styles.modalLabel}>
-                  Recommendation
-                </Text>
-
+                <Text style={styles.modalLabel}>Recommendation</Text>
                 <View style={styles.rule} />
-
-                <Text style={styles.modalBody}>
-                  {selected.recommendation}
-                </Text>
+                <Text style={styles.modalBody}>{selected.recommendation}</Text>
 
                 {/* FOOTER */}
                 {selected.footer !== '' && (
-                  <Text
-                    style={styles.modalFooter}
-                  >
-                    {selected.footer}
-                  </Text>
+                  <Text style={styles.modalFooter}>{selected.footer}</Text>
                 )}
 
-                {/* =================================================
-                    FEEDBACK
-                ================================================= */}
-
-                <View
-                  style={
-                    styles.feedbackContainer
-                  }
-                >
-                  <Text
-                    style={
-                      styles.feedbackQuestion
-                    }
-                  >
-                    Was this recommendation
-                    helpful?
+                {/* FEEDBACK */}
+                <View style={styles.feedbackContainer}>
+                  <Text style={styles.feedbackQuestion}>
+                    Was this recommendation helpful?
                   </Text>
 
-                  <View
-                    style={
-                      styles.feedbackButtons
-                    }
-                  >
-
-                    {/* THUMBS UP */}
+                  <View style={styles.feedbackButtons}>
                     <TouchableOpacity
                       style={[
                         styles.feedbackButton,
-                        feedback[
-                          selected.id
-                        ] === 'up' &&
+                        feedback[selected.id] === 'up' &&
                           styles.feedbackButtonSelected,
                       ]}
-                      onPress={() =>
-                        giveFeedback(
-                          selected.id,
-                          'up'
-                        )
-                      }
+                      onPress={() => toggleUp(selected.id)}
                     >
                       <Ionicons
                         name={
-                          feedback[
-                            selected.id
-                          ] === 'up'
+                          feedback[selected.id] === 'up'
                             ? 'thumbs-up'
                             : 'thumbs-up-outline'
                         }
                         size={20}
                         color={
-                          feedback[
-                            selected.id
-                          ] === 'up'
-                            ? '#020D09'
-                            : '#48DDB0'
+                          feedback[selected.id] === 'up' ? '#020D09' : '#48DDB0'
                         }
                       />
 
                       <Text
                         style={[
                           styles.feedbackText,
-                          feedback[
-                            selected.id
-                          ] === 'up' &&
+                          feedback[selected.id] === 'up' &&
                             styles.feedbackTextSelected,
                         ]}
                       >
@@ -927,46 +593,30 @@ export default function Insights() {
                       </Text>
                     </TouchableOpacity>
 
-                    {/* THUMBS DOWN */}
                     <TouchableOpacity
                       style={[
                         styles.feedbackButton,
-                        feedback[
-                          selected.id
-                        ] === 'down' &&
+                        feedback[selected.id] === 'down' &&
                           styles.feedbackButtonSelected,
                       ]}
-                      onPress={() =>
-                        giveFeedback(
-                          selected.id,
-                          'down'
-                        )
-                      }
+                      onPress={() => toggleDown(selected.id)}
                     >
                       <Ionicons
                         name={
-                          feedback[
-                            selected.id
-                          ] === 'down'
+                          feedback[selected.id] === 'down'
                             ? 'thumbs-down'
                             : 'thumbs-down-outline'
                         }
                         size={20}
                         color={
-                          feedback[
-                            selected.id
-                          ] === 'down'
-                            ? '#020D09'
-                            : '#E07A5F'
+                          feedback[selected.id] === 'down' ? '#020D09' : '#E07A5F'
                         }
                       />
 
                       <Text
                         style={[
                           styles.feedbackText,
-                          feedback[
-                            selected.id
-                          ] === 'down' &&
+                          feedback[selected.id] === 'down' &&
                             styles.feedbackTextSelected,
                         ]}
                       >
@@ -975,38 +625,82 @@ export default function Insights() {
                     </TouchableOpacity>
                   </View>
 
-                  {feedbackMessage[
-                    selected.id
-                  ] && (
-                    <Text
-                      style={
-                        styles.feedbackMessage
-                      }
-                    >
-                      {
-                        feedbackMessage[
-                          selected.id
-                        ]
-                      }
+                  {feedbackMessage[selected.id] && (
+                    <Text style={styles.feedbackMessage}>
+                      {feedbackMessage[selected.id]}
                     </Text>
                   )}
                 </View>
 
-                {/* CLOSE */}
                 <TouchableOpacity
                   style={styles.closeButton}
-                  onPress={() =>
-                    setSelected(null)
-                  }
+                  onPress={() => setSelected(null)}
                 >
-                  <Text style={styles.closeText}>
-                    Close
-                  </Text>
+                  <Text style={styles.closeText}>Close</Text>
                 </TouchableOpacity>
               </>
             ) : null}
 
           </ScrollView>
+        </View>
+      </Modal>
+
+      {/* =====================================================
+          "NOT HELPFUL" REASON PROMPT
+      ===================================================== */}
+
+      <Modal visible={reasonTarget !== null} transparent animationType="fade">
+        <View style={styles.overlay}>
+          <View style={styles.reasonCard}>
+            <Text style={styles.reasonTitle}>What didn&apos;t work?</Text>
+
+            <Text style={styles.reasonHelper}>
+              Tell us what was wrong with this recommendation. This helps us
+              improve how recommendations are generated and explained.
+            </Text>
+
+            <TextInput
+              style={styles.reasonInput}
+              placeholder="e.g. the explanation was hard to follow, or the advice didn't match what I ate..."
+              placeholderTextColor="#60766E"
+              multiline
+              maxLength={500}
+              value={reasonText}
+              onChangeText={setReasonText}
+              autoFocus
+            />
+
+            <Text style={styles.reasonCount}>{reasonText.length}/500</Text>
+
+            <View style={styles.reasonButtons}>
+              <TouchableOpacity
+                style={styles.reasonCancel}
+                onPress={() => setReasonTarget(null)}
+              >
+                <Text style={styles.reasonCancelText}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={
+                  reasonText.trim().length >= 3
+                    ? styles.reasonSubmit
+                    : styles.reasonSubmitDisabled
+                }
+                disabled={reasonText.trim().length < 3}
+                onPress={submitReason}
+              >
+                <Text
+                  style={
+                    reasonText.trim().length >= 3
+                      ? styles.reasonSubmitText
+                      : styles.reasonSubmitTextDisabled
+                  }
+                >
+                  Submit
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
       </Modal>
     </SafeAreaView>
@@ -1377,6 +1071,96 @@ const styles = StyleSheet.create({
     fontSize: 8,
     marginTop: 8,
     lineHeight: 12,
+  },
+
+  /* =========================================================
+     "NOT HELPFUL" REASON PROMPT
+  ========================================================= */
+
+  reasonCard: {
+    backgroundColor: '#07140F',
+    borderRadius: 14,
+    padding: 20,
+  },
+
+  reasonTitle: {
+    color: '#fff',
+    fontSize: 18,
+    fontFamily: 'serif',
+  },
+
+  reasonHelper: {
+    color: '#60766E',
+    fontSize: 10,
+    lineHeight: 14,
+    marginTop: 6,
+    marginBottom: 16,
+  },
+
+  reasonInput: {
+    borderWidth: 1,
+    borderColor: '#48DDB0',
+    borderRadius: 10,
+    padding: 12,
+    height: 110,
+    textAlignVertical: 'top',
+    color: '#fff',
+    fontSize: 11,
+    lineHeight: 16,
+  },
+
+  reasonCount: {
+    color: '#3A5049',
+    fontSize: 8,
+    textAlign: 'right',
+    marginTop: 6,
+  },
+
+  reasonButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 16,
+  },
+
+  reasonCancel: {
+    flex: 1,
+    backgroundColor: '#0A1A14',
+    borderRadius: 8,
+    paddingVertical: 13,
+    alignItems: 'center',
+  },
+
+  reasonCancelText: {
+    color: '#fff',
+    fontSize: 12,
+  },
+
+  reasonSubmit: {
+    flex: 1,
+    backgroundColor: '#4ECBA0',
+    borderRadius: 8,
+    paddingVertical: 13,
+    alignItems: 'center',
+  },
+
+  reasonSubmitDisabled: {
+    flex: 1,
+    backgroundColor: '#123B2F',
+    borderRadius: 8,
+    paddingVertical: 13,
+    alignItems: 'center',
+  },
+
+  reasonSubmitText: {
+    color: '#00382B',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+
+  reasonSubmitTextDisabled: {
+    color: '#3A5049',
+    fontSize: 12,
+    fontWeight: '600',
   },
 
   /* =========================================================

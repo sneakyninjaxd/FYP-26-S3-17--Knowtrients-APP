@@ -1,15 +1,23 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import {
-  SafeAreaView,
-  ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-export default function ProfileScreen() {
+export default function AccountDetailsScreen() {
+  const insets = useSafeAreaInsets();
+
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView>
-        {/* Logo */}
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <ScrollView contentContainerStyle={{ paddingBottom: 40 + insets.bottom }}>
+
+        {/* Header */}
         <View style={styles.header}>
           <View style={styles.brandRow}>
             <View style={styles.logoBadge}>
@@ -23,92 +31,106 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         </View>
         <View style={styles.divider} />
-        <View>
-            <Text style = {styles.title}>
-                Account Details
-            </Text>
-            <Text style = {styles.description}>
-                Update your account details & settings 
-            </Text>
-        <View style={styles.Card}>
-                <Text style={styles.label}>Email</Text>
-        
-                <TextInput
-                  style={styles.input}
-                  placeholder="example123@gmail.com"
-                  placeholderTextColor="#bd4d4d"
-                />
-                {/* First Name and Last Name placed in a row with flexbox*/}
-                <View style={styles.row}>
-        
-                  <View style={styles.field}>
-                    <Text style={styles.label}>First Name:</Text>
-        
-                    <TextInput
-                      style={styles.input}
-                      placeholder="John"
-                      placeholderTextColor="#bd4d4d"
-                    />
-                  </View>
-        
-                  <View style={styles.field}>
-                    <Text style={styles.label}>Last Name:</Text>
-        
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Doe"
-                      placeholderTextColor="#bd4d4d"
-                    />
-                  </View>
-        
-                </View>
-                {/* password with secure text*/}
-                <Text style={styles.label}>Current Password:</Text>
-        
-                <TextInput
-                  secureTextEntry
-                  style={styles.input}
-                  placeholder="**************"
-                  placeholderTextColor="#bd4d4d"
-                />
-        
-                <Text style={styles.label}>Change Password:</Text>
-        
-                <TextInput
-                  secureTextEntry
-                  style={styles.input}
-                  placeholder="**************"
-                  placeholderTextColor="#bd4d4d"
-                /> 
 
-                <Text style={styles.label}>Re-type New Password:</Text>
-        
-                <TextInput
-                  secureTextEntry
-                  style={styles.input}
-                  placeholder="**************"
-                  placeholderTextColor="#bd4d4d"
-                /> 
+        <Text style={styles.title}>Account Details</Text>
+        <Text style={styles.subtitle}>
+          Update your account details &amp; settings
+        </Text>
 
+        {/* Personal details */}
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Ionicons name="person-outline" size={14} color="#48DDB0" />
+            <Text style={styles.cardTitle}>Personal Details</Text>
+          </View>
 
+          <Text style={styles.label}>Email</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="example123@gmail.com"
+            placeholderTextColor="#3A5049"
+            autoCapitalize="none"
+            keyboardType="email-address"
+          />
 
-                      {/* Savge button*/}
-                        <TouchableOpacity style={styles.button}
-                        onPress={() => router.push('/account/account')}>
-                          <Text style={styles.buttonText}>
-                            Save
-                          </Text>
-                        </TouchableOpacity>
-                </View>
+          <View style={styles.row}>
+            <View style={styles.field}>
+              <Text style={styles.label}>First Name</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="John"
+                placeholderTextColor="#3A5049"
+              />
             </View>
-    </ScrollView>
-    </SafeAreaView>
 
+            <View style={styles.field}>
+              <Text style={styles.label}>Last Name</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Doe"
+                placeholderTextColor="#3A5049"
+              />
+            </View>
+          </View>
+        </View>
+
+        {/* Security */}
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Ionicons name="lock-closed-outline" size={14} color="#48DDB0" />
+            <Text style={styles.cardTitle}>Security</Text>
+          </View>
+
+          <Text style={styles.cardHint}>
+            Leave these blank if you don&apos;t want to change your password.
+          </Text>
+
+          <Text style={styles.label}>Current Password</Text>
+          <TextInput
+            secureTextEntry
+            style={styles.input}
+            placeholder="••••••••••"
+            placeholderTextColor="#3A5049"
+          />
+
+          <Text style={styles.label}>New Password</Text>
+          <TextInput
+            secureTextEntry
+            style={styles.input}
+            placeholder="At least 8 characters"
+            placeholderTextColor="#3A5049"
+          />
+
+          <Text style={styles.label}>Re-type New Password</Text>
+          <TextInput
+            secureTextEntry
+            style={styles.input}
+            placeholder="••••••••••"
+            placeholderTextColor="#3A5049"
+          />
+        </View>
+
+        {/* Save */}
+        <TouchableOpacity
+          style={styles.button}
+          onPress={() => router.push('/account/account')}
+        >
+          <Text style={styles.buttonText}>Save Changes</Text>
+        </TouchableOpacity>
+
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
-
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#020D09',
+  },
+
+  /* Header */
+
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -134,426 +156,93 @@ const styles = StyleSheet.create({
 
   divider: { height: 1, backgroundColor: '#123B2F' },
 
-  profileTagline: {
+  /* Title */
+
+  title: {
     color: '#fff',
-    fontSize: 12,
-    marginTop: 3,
+    fontSize: 32,
+    fontFamily: 'serif',
+    paddingHorizontal: 25,
+    paddingTop: 20,
   },
 
-    progressRow: {
-    flexDirection: 'row',
-    gap: 6,
-    marginBottom: 30,
-  },
-
-  step: {
-    flex: 1,
-  },
-
-  activeStep: {
-    color: '#48DDB0',
-    fontSize: 10,
-    marginBottom: 5,
-  },
-
-  inactiveStep: {
-    color: '#17644E',
-    fontSize: 10,
-    marginBottom: 5,
-  },
-
-  activeLine: {
-    height: 3,
-    backgroundColor: '#48DDB0',
-    borderRadius: 5,
-  },
-
-  inactiveLine: {
-    height: 3,
-    backgroundColor: '#123B2F',
-    borderRadius: 5,
-  },
-
-  description: {
+  subtitle: {
     color: '#3AA889',
-    fontSize: 13,
-    lineHeight: 17,
+    fontSize: 11,
+    paddingHorizontal: 25,
+    marginTop: 4,
     marginBottom: 20,
-    paddingLeft: 25,
   },
 
+  /* Cards */
 
-    dateInput: {
+  card: {
+    backgroundColor: '#07140F',
+    borderRadius: 16,
+    padding: 20,
+    marginHorizontal: 25,
+    marginBottom: 14,
+  },
+
+  cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#10251E',
-    width: 135,
-    height: 38,
-    borderRadius: 7,
-    paddingHorizontal: 10,
+    gap: 7,
+    marginBottom: 4,
   },
 
-  input: {
-    flex: 1,
-    color: '#FFFFFF',
-    padding: 0,
+  cardTitle: {
+    color: '#48DDB0',
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 0.3,
   },
 
-  icon: {
-    color: '#A5DCCC',
-    fontSize: 18,
+  cardHint: {
+    color: '#60766E',
+    fontSize: 9,
+    lineHeight: 13,
+    marginTop: 4,
   },
+
+  /* Fields */
 
   label: {
     color: '#D4E6DF',
-    fontSize: 12,
-    marginBottom: 7,
-    marginTop: 12,
-  },
-
-genderRow: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  marginTop: 10,
-},
-
-radioRow: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  marginLeft: 15,
-},
-
-circle: {
-  width: 12,
-  height: 12,
-  borderRadius: 6,
-  borderWidth: 1,
-  borderColor: '#FFFFFF',
-  justifyContent: 'center',
-  alignItems: 'center',
-},
-
-circleSelected: {
-  borderColor: '#48DDB0',
-},
-
-dot: {
-  width: 6,
-  height: 6,
-  borderRadius: 3,
-  backgroundColor: '#48DDB0',
-},
-
-genderText: {
-  color: '#D4E6DF',
-  fontSize: 12,
-  marginLeft: 5,
-},
-  countryInput: {
-    width: 165,
-    height: 38,
-    backgroundColor: '#10251E',
-    borderRadius: 7,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 12,
-  },
-
-  placeholder: {
-    color: '#60766E',
-    fontSize: 12,
-  },
-
-  arrow: {
-    color: '#48DDB0',
-    fontSize: 18,
-  },
-
-  helperText: {
-    color: '#60766E',
-    fontSize: 9,
-    marginTop: 7,
-  },
-
-  row: {
-    flexDirection: 'row',
-    gap: 20,
-  },
-
-  field: {
-    flex: 1,
-  },
-
-  measureInput: {
-    height: 38,
-    backgroundColor: '#10251E',
-    borderRadius: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 10,
-  },
-
-  unit: {
-    color: '#48DDB0',
     fontSize: 11,
-    fontWeight: 'bold',
-  },
-
-  conditionContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-
-  conditionButton: {
-    backgroundColor: '#102A21',
-    paddingVertical: 7,
-    paddingHorizontal: 20,
-    borderRadius: 20,
-  },
-
-  selectedCondition: {
-    backgroundColor: '#102A21',
-    borderWidth: 1,
-    borderColor: '#48DDB0',
-    paddingVertical: 7,
-    paddingHorizontal: 20,
-    borderRadius: 20,
-  },
-
-  conditionText: {
-    color: '#60766E',
-    fontSize: 11,
-  },
-
-  selectedText: {
-    color: '#48DDB0',
-    fontSize: 11,
-  },
-
-  conditionInput: {
-    height: 42,
-    borderWidth: 1,
-    borderColor: '#48DDB0',
-    borderRadius: 10,
-    marginTop: 8,
-    paddingHorizontal: 12,
-    color: '#FFFFFF',
-  },
-
-  conditionHelper: {
-    color: '#60766E',
-    fontSize: 9,
-    marginTop: 7,
-  },
-
-  continueButton: {
-    backgroundColor: '#48DDB0',
-    width: 143,
-    height: 42,
-    borderRadius: 7,
-    justifyContent: 'center',
-    alignItems: 'center',
-    alignSelf: 'center',
-    marginTop: 45,
-  },
-
-  continueText: {
-    color: '#00382B',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-
-  divider: {
-  backgroundColor: '#123B2F',
-  height: '0.1%',
-},
-
-date: {
-  color: '#48DDB0',
-  fontSize: 12,
-  paddingLeft: 25,
-  marginTop: 20,
-  marginBottom: 6,
-},
-  container: {
-    flex: 1,
-    backgroundColor: '#020D09',
-  },
-
-  logoContainer: {
-    height: 130,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  logo: {
-    color: '#fff',
-    fontSize: 28,
-    fontFamily: 'serif',
-  },
-
-    step: {
-    flex: 1,
-  },
-
-  activeStep: {
-    color: '#48DDB0',
-    fontSize: 10,
-    marginBottom: 5,
-  },
-
-  inactiveStep: {
-    color: '#17644E',
-    fontSize: 10,
-    marginBottom: 5,
-  },
-
-  activeLine: {
-    height: 3,
-    backgroundColor: '#48DDB0',
-    borderRadius: 5,
-  },
-
-activityBox: {
-  borderWidth: 1,
-  borderColor: '#123B2F',
-  borderRadius: 12,
-  paddingVertical: 14,
-  paddingHorizontal: 18,
-  marginHorizontal: 25,
-  marginBottom: 12,
-},
-
-activity: {
-  color: '#3AA889',
-  fontSize: 13,
-},
-
-header: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  paddingHorizontal: 25,
-  paddingVertical: 20,
-},
-
-activityBox2: {
-  borderWidth: 1,
-  borderColor: '#921d1d',
-  borderRadius: 12,
-  paddingVertical: 14,
-  paddingHorizontal: 18,
-  marginHorizontal: 25,
-  marginBottom: 12,
-},
-
-activity2: {
-  color: '#921d1d',
-  fontSize: 13,
-},
-
-activityBox3: {
-  borderWidth: 1,
-  backgroundColor: '#ce3535',
-  borderRadius: 12,
-  paddingVertical: 14,
-  paddingHorizontal: 18,
-  marginHorizontal: 25,
-  marginTop: 80,
-
-},
-
-activity3: {
-  color: '#faf7f7',
-  fontSize: 13,
-},
-
-  logobelow: {
-    color: '#ddd',
-    fontSize: 12,
-  },
-
-  Card: {
-    flex: 1,
-    backgroundColor: '#0B2119',
-    borderTopLeftRadius: 25,
-    borderTopRightRadius: 25,
-    padding: 45,
-  },
-
-  label: {
-    color: '#fff',
-    marginBottom: 5,
+    marginTop: 16,
+    marginBottom: 6,
   },
 
   input: {
     backgroundColor: '#00100B',
+    borderWidth: 1,
+    borderColor: '#123B2F',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
     color: '#fff',
-    padding: 12,
-    borderRadius: 5,
-    marginBottom: 12,
+    fontSize: 13,
   },
 
-  row: {
-    flexDirection: 'row',
-    gap: 12,
-  },
+  row: { flexDirection: 'row', gap: 12 },
 
-  field: {
-    flex: 1,
-  },
+  field: { flex: 1 },
+
+  /* Save */
 
   button: {
-    backgroundColor: '#48DDB0',
-    padding: 12,
-    borderRadius: 5,
+    backgroundColor: '#4ECBA0',
+    borderRadius: 10,
+    paddingVertical: 15,
     alignItems: 'center',
-    marginTop: 20,
-    width: 130,
-    alignSelf: 'center',
+    marginHorizontal: 25,
+    marginTop: 10,
   },
 
   buttonText: {
     color: '#00382B',
     fontSize: 14,
+    fontWeight: '600',
   },
-
-  login: {
-    color: '#fff',
-    textAlign: 'center',
-    marginTop: 70,
-    fontSize: 12,
-  },
-
-   title:{
-    color:'#fff',
-    fontSize:30,
-    textAlign:'center',
-    fontFamily:'serif',
-    margintop: 40,
-  },
-
-  description:{
-    color:'#ccc',
-    textAlign:'center',
-    marginBottom:25,
-  },
-    container: {
-    flex: 1,
-    backgroundColor: '#020D09',
-  },
-
-  logoContainer: {
-    height: 130,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  logo: {
-    color: '#fff',
-    fontSize: 28,
-    fontFamily: 'serif',
-  }
 });

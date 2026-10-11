@@ -1,6 +1,10 @@
+import { useAuth } from '@/contexts/auth-context';
 import { useProfile } from '@/contexts/profile-context';
+import { buildReportHtml, gatherReportData } from '@/src/report';
 import { Ionicons } from '@expo/vector-icons';
+import * as Print from 'expo-print';
 import { router } from 'expo-router';
+import * as Sharing from 'expo-sharing';
 import { useState } from 'react';
 import {
   Modal,
@@ -17,12 +21,23 @@ const REPORT_SECTIONS = [
   { id: 'progress', label: 'My Progress Data' },
 ];
 
+const REPORT_RANGES = [
+  { id: 7, label: '1 week' },
+  { id: 30, label: '1 month' },
+];
+
 export default function Profile() {
+  const { token, user } = useAuth();
   const { profile } = useProfile();
   const isPremium = profile.plan === 'premium';
 
   const [showReport, setShowReport] = useState(false);
   const [selected, setSelected] = useState([]);
+  const [reportDays, setReportDays] = useState(7);
+
+  const [generating, setGenerating] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [reportError, setReportError] = useState(null);
 
   const toggleSection = (id) => {
     setSelected((prev) =>
@@ -32,7 +47,46 @@ export default function Profile() {
 
   const openReport = () => {
     setSelected([]);
+    setReportDays(7);
+    setProgress(0);
+    setReportError(null);
     setShowReport(true);
+  };
+
+  /**
+   * Roughly two API calls per day in the range, so a month is slow —
+   * especially on a cold backend. The progress figure shows it hasn't hung.
+   */
+  const downloadReport = async () => {
+    if (!token || !selected.length || generating) return;
+
+    setGenerating(true);
+    setProgress(0);
+    setReportError(null);
+
+    try {
+      const data = await gatherReportData(token, {
+        days: reportDays,
+        onProgress: setProgress,
+      });
+      const html = buildReportHtml(data, { sections: selected, user });
+
+      const { uri } = await Print.printToFileAsync({ html });
+
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri, {
+          mimeType: 'application/pdf',
+          dialogTitle: 'Your Knowtrients health report',
+          UTI: 'com.adobe.pdf',
+        });
+      }
+
+      setShowReport(false);
+    } catch (err) {
+      setReportError(err?.message ?? 'Could not generate the report.');
+    } finally {
+      setGenerating(false);
+    }
   };
 
   const generatedAt = new Date().toLocaleString('en-GB', {
@@ -112,6 +166,7 @@ export default function Profile() {
                   key={section.id}
                   onPress={() => toggleSection(section.id)}
                   style={[styles.optionBox, checked && styles.optionBoxActive]}
+                  disabled={generating}
                   accessibilityRole="checkbox"
                   accessibilityState={{ checked }}
                 >
@@ -122,20 +177,56 @@ export default function Profile() {
               );
             })}
 
+            <Text style={styles.modalHelper}>How far back?</Text>
+
+            <View style={styles.rangeRow}>
+              {REPORT_RANGES.map((r) => {
+                const active = reportDays === r.id;
+                return (
+                  <TouchableOpacity
+                    key={r.id}
+                    onPress={() => setReportDays(r.id)}
+                    style={[styles.rangeChip, active && styles.rangeChipActive]}
+                    disabled={generating}
+                  >
+                    <Text style={active ? styles.rangeChipTextActive : styles.rangeChipText}>
+                      {r.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {reportError && (
+              <Text style={styles.reportError}>{reportError}</Text>
+            )}
+
+            {generating && (
+              <Text style={styles.reportProgress}>
+                Gathering your data… {progress}%
+              </Text>
+            )}
+
             <View style={styles.modalButtons}>
               <TouchableOpacity
                 style={styles.cancelButton}
                 onPress={() => setShowReport(false)}
+                disabled={generating}
               >
                 <Text style={styles.cancelText}>Cancel</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={selected.length ? styles.downloadButton : styles.downloadDisabled}
-                disabled={selected.length === 0}
+                style={
+                  selected.length && !generating
+                    ? styles.downloadButton
+                    : styles.downloadDisabled
+                }
+                disabled={selected.length === 0 || generating}
+                onPress={downloadReport}
               >
                 <Text style={selected.length ? styles.downloadText : styles.downloadTextDisabled}>
-                  Download
+                  {generating ? 'Generating…' : 'Download'}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -147,7 +238,6 @@ export default function Profile() {
 }
 
 const styles = StyleSheet.create({
-
   container: { flex: 1, backgroundColor: '#020D09' },
 
   header: {
@@ -251,6 +341,25 @@ const styles = StyleSheet.create({
 
   optionText: { color: '#60766E', fontSize: 12 },
   optionTextActive: { color: '#48DDB0', fontSize: 12 },
+
+  rangeRow: { flexDirection: 'row', gap: 8, marginBottom: 4 },
+
+  rangeChip: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#123B2F',
+    borderRadius: 20,
+    paddingVertical: 9,
+    alignItems: 'center',
+  },
+
+  rangeChipActive: { borderColor: '#48DDB0' },
+
+  rangeChipText: { color: '#60766E', fontSize: 11 },
+  rangeChipTextActive: { color: '#48DDB0', fontSize: 11 },
+
+  reportError: { color: '#E07A5F', fontSize: 10, marginTop: 6 },
+  reportProgress: { color: '#48DDB0', fontSize: 10, marginTop: 6 },
 
   modalButtons: { flexDirection: 'row', gap: 12, marginTop: 12 },
 

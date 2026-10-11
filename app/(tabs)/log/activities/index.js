@@ -1,5 +1,6 @@
 import { useActivities } from '@/contexts/activity-context';
 import { toLogDate } from '@/services/api';
+import { initHealth, readDay, readWeek } from '@/src/health';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { router, useFocusEffect } from 'expo-router';
@@ -16,13 +17,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
 
 const GOALS = { steps: 10000, calories: 500, activeTime: 90 };
-
-/**
- * PLACEHOLDER — the backend has no steps field, so these are sample values
- * for demonstration. Replace with real data once a steps column exists.
- */
-const SAMPLE_STEPS_TODAY = 6800;
-const SAMPLE_STEPS_WEEK = [5000, 4000, 6000, 5000, 7000, 10000, 6800];
 
 const MAX_STEPS = 10000;
 
@@ -43,13 +37,11 @@ function Ring({ percent, color, radius }) {
   );
 }
 
-function Bar({ label, value, goal, unit, color, sample }) {
+function Bar({ label, value, goal, unit, color }) {
   return (
     <View style={styles.barBlock}>
       <View style={styles.barTop}>
-        <Text style={styles.barLabel}>
-          {label}{sample ? <Text style={styles.sampleTag}> · sample</Text> : null}
-        </Text>
+        <Text style={styles.barLabel}>{label}</Text>
         <Text style={styles.barValue}>
           {value}<Text style={styles.barGoal}>/{goal} {unit}</Text>
         </Text>
@@ -66,13 +58,42 @@ export default function Activities() {
   const [date, setDate] = useState(new Date());
   const [showPicker, setShowPicker] = useState(false);
 
-  // Refetch on focus so entries added on the form show up.
+  /**
+   * Steps and active calories from Health Connect. `health` is null until
+   * the first read completes; `healthStatus` distinguishes "no data" from
+   * "no permission" so the empty state can say something useful.
+   */
+  const [health, setHealth] = useState(null);
+  const [healthWeek, setHealthWeek] = useState(null);
+  const [healthStatus, setHealthStatus] = useState('loading');
+
+  useFocusEffect(
+    useCallback(() => {
+      (async () => {
+        const status = await initHealth();
+        setHealthStatus(status);
+
+        if (status === 'ready') {
+          setHealth(await readDay(date));
+          setHealthWeek(await readWeek(date));
+        }
+      })();
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [date])
+  );
+
+  /**
+   * Refetch on focus so entries added on the form show up.
+   *
+   * Depends on `date` only: loadActivities and loadWeek change identity on
+   * every context update, so depending on them re-fires this forever.
+   */
   useFocusEffect(
     useCallback(() => {
       loadActivities(toLogDate(date));
       loadWeek(toLogDate(date));
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [loadActivities, loadWeek])
+    }, [date])
   );
 
   const selectDate = (selected) => {
@@ -87,12 +108,15 @@ export default function Activities() {
   const caloriesBurnt = visible.reduce((sum, a) => sum + (a.calories_burned ?? 0), 0);
 
   const TODAY = {
-    steps: SAMPLE_STEPS_TODAY,
-    calories: Math.round(caloriesBurnt),
+    steps: health?.steps ?? 0,
+    // Prefer the device's figure; fall back to what the user logged manually.
+    calories: Math.round(health?.calories || caloriesBurnt),
     activeTime: Math.round(activeTime),
   };
 
-  /** Steps are sample values; minutes come from the API. */
+  const healthUnavailable = healthStatus !== 'ready' && healthStatus !== 'loading';
+
+  /** Steps from Health Connect; minutes from the API. */
   const week = useMemo(
     () =>
       Array.from({ length: 7 }, (_, i) => {
@@ -101,11 +125,11 @@ export default function Activities() {
         const key = toLogDate(d);
         return {
           label: d.toLocaleDateString('en-GB', { weekday: 'short' }),
-          steps: SAMPLE_STEPS_WEEK[i],
+          steps: healthWeek?.[i]?.steps ?? 0,
           minutes: weekly?.[key] ?? 0,
         };
       }),
-    [weekly, date]
+    [weekly, healthWeek, date]
   );
 
   return (
@@ -125,6 +149,7 @@ export default function Activities() {
           </TouchableOpacity>
         </View>
         <View style={styles.divider} />
+
         <View style={styles.titleRow}>
           <View>
             <Text style={styles.title}>My Activities</Text>
@@ -169,13 +194,20 @@ export default function Activities() {
               <Text style={styles.cardTitle}>Daily{'\n'}Activities</Text>
 
               <Bar label="Steps" value={TODAY.steps} goal={GOALS.steps}
-                   unit="steps" color="#48DDB0" sample />
+                   unit="steps" color="#48DDB0" />
               <Bar label="Calories Burnt" value={TODAY.calories} goal={GOALS.calories}
                    unit="kcal" color="#2E8B7A" />
               <Bar label="Active Time" value={TODAY.activeTime} goal={GOALS.activeTime}
                    unit="mins" color="#C77D3A" />
             </View>
           </View>
+
+          {healthUnavailable && (
+            <Text style={styles.healthNote}>
+              Step data needs Health Connect. Connect a fitness app or wearable
+              to it to see your steps here.
+            </Text>
+          )}
 
           <Text
             style={styles.statsLink}
@@ -233,10 +265,7 @@ export default function Activities() {
 
         {/* Weekly steps chart */}
         <View style={styles.chartCard}>
-          <Text style={styles.chartTitle}>
-            Steps over the last 7 days
-            <Text style={styles.sampleTag}> · sample data</Text>
-          </Text>
+          <Text style={styles.chartTitle}>Steps over the last 7 days</Text>
 
           <View style={styles.chartArea}>
             {[10000, 8000, 6000, 4000, 2000, 0].map((tick) => (
@@ -294,6 +323,7 @@ const styles = StyleSheet.create({
   logo: { color: '#fff', fontSize: 19, fontWeight: '600' },
 
   divider: { height: 1, backgroundColor: '#123B2F' },
+
   titleRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -319,6 +349,13 @@ const styles = StyleSheet.create({
   cardRight: { flex: 1 },
   cardTitle: { color: '#fff', fontSize: 18, fontFamily: 'serif', marginBottom: 14 },
 
+  healthNote: {
+    color: '#C7A03A',
+    fontSize: 9,
+    lineHeight: 13,
+    marginTop: 12,
+  },
+
   statsLink: {
     color: '#60766E',
     fontSize: 9,
@@ -333,8 +370,6 @@ const styles = StyleSheet.create({
   barGoal: { color: '#60766E', fontSize: 8 },
   barTrack: { height: 5, backgroundColor: '#123B2F', borderRadius: 3 },
   barFill: { height: 5, borderRadius: 3 },
-
-  sampleTag: { color: '#60766E', fontSize: 8, fontStyle: 'italic' },
 
   sectionHeader: {
     flexDirection: 'row',
