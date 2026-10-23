@@ -16,7 +16,12 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
 
-const GOALS = { steps: 10000, calories: 500, activeTime: 90 };
+/**
+ * Calories are measured against a full-day total now that Health Connect
+ * reports TotalCaloriesBurned (which includes resting energy), not the
+ * ~500 kcal that suited active-only calories.
+ */
+const GOALS = { steps: 10000, calories: 2200, activeTime: 90 };
 
 const MAX_STEPS = 10000;
 
@@ -59,9 +64,9 @@ export default function Activities() {
   const [showPicker, setShowPicker] = useState(false);
 
   /**
-   * Steps and active calories from Health Connect. `health` is null until
-   * the first read completes; `healthStatus` distinguishes "no data" from
-   * "no permission" so the empty state can say something useful.
+   * Steps and total calories burned from Health Connect. `health` is null
+   * until the first read completes; `healthStatus` distinguishes "no data"
+   * from "no permission" so the empty state can say something useful.
    */
   const [health, setHealth] = useState(null);
   const [healthWeek, setHealthWeek] = useState(null);
@@ -107,10 +112,14 @@ export default function Activities() {
   const activeTime = visible.reduce((sum, a) => sum + (a.duration_minutes ?? 0), 0);
   const caloriesBurnt = visible.reduce((sum, a) => sum + (a.calories_burned ?? 0), 0);
 
+  const deviceCalories = Math.round(health?.calories ?? 0);
+  const loggedCalories = Math.round(caloriesBurnt);
+
   const TODAY = {
     steps: health?.steps ?? 0,
-    // Prefer the device's figure; fall back to what the user logged manually.
-    calories: Math.round(health?.calories || caloriesBurnt),
+    // Device total plus anything logged by hand, so gym sessions Health
+    // Connect never saw still count towards the day.
+    calories: deviceCalories + loggedCalories,
     activeTime: Math.round(activeTime),
   };
 
@@ -201,6 +210,14 @@ export default function Activities() {
                    unit="mins" color="#C77D3A" />
             </View>
           </View>
+
+          {/* Where the calorie figure came from, so the total is explainable. */}
+          {loggedCalories > 0 && (
+            <Text style={styles.breakdown}>
+              Calories burnt: {deviceCalories} from your device
+              {' + '}{loggedCalories} logged manually
+            </Text>
+          )}
 
           {healthUnavailable && (
             <Text style={styles.healthNote}>
@@ -348,6 +365,13 @@ const styles = StyleSheet.create({
   cardRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   cardRight: { flex: 1 },
   cardTitle: { color: '#fff', fontSize: 18, fontFamily: 'serif', marginBottom: 14 },
+
+  breakdown: {
+    color: '#60766E',
+    fontSize: 9,
+    lineHeight: 13,
+    marginTop: 12,
+  },
 
   healthNote: {
     color: '#C7A03A',

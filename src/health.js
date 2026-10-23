@@ -10,7 +10,7 @@ import { Platform } from 'react-native';
 
 const PERMISSIONS = [
   { accessType: 'read', recordType: 'Steps' },
-  { accessType: 'read', recordType: 'ActiveCaloriesBurned' },
+  { accessType: 'read', recordType: 'TotalCaloriesBurned' },
 ];
 
 /** Lazily required so importing this file doesn't break web or iOS. */
@@ -88,12 +88,12 @@ export async function readDay(date = new Date()) {
 
     const [stepsAgg, caloriesAgg] = await Promise.all([
       HC.aggregateRecord({ recordType: 'Steps', timeRangeFilter }),
-      HC.aggregateRecord({ recordType: 'ActiveCaloriesBurned', timeRangeFilter }),
+      HC.aggregateRecord({ recordType: 'TotalCaloriesBurned', timeRangeFilter }).catch(() => null),
     ]);
 
     return {
       steps: Math.round(stepsAgg?.COUNT_TOTAL ?? 0),
-      calories: Math.round(caloriesAgg?.ACTIVE_CALORIES_TOTAL?.inKilocalories ?? 0),
+      calories: Math.round(caloriesAgg?.ENERGY_TOTAL?.inKilocalories ?? 0),
     };
   } catch (err) {
     console.warn('Health Connect read failed', err);

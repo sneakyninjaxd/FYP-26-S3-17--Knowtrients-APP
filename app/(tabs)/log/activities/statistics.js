@@ -16,7 +16,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
 
-const GOALS = { steps: 10000, calories: 500, activeTime: 90 };
+/** Must match the daily screen, or the two disagree about the same day. */
+const GOALS = { steps: 10000, calories: 2200, activeTime: 90 };
 
 /** The chart only has room for this many bars, whatever the range. */
 const MAX_BARS = 7;
@@ -128,7 +129,8 @@ export default function ActivityStatistics() {
 
     const minutes = rows.reduce((s, r) => s + r.minutes, 0) / rows.length;
 
-    // Prefer the device's burn figure where it has one.
+    // Device burn plus anything logged by hand, averaged over the range —
+    // same arithmetic as the daily screen.
     const deviceCalories = healthRows?.length
       ? healthRows.reduce((s, d) => s + (d?.calories ?? 0), 0) / healthRows.length
       : 0;
@@ -136,7 +138,7 @@ export default function ActivityStatistics() {
 
     return {
       steps,
-      calories: Math.round(deviceCalories || loggedCalories),
+      calories: Math.round(deviceCalories + loggedCalories),
       activeTime: Math.round(minutes),
     };
   }, [rows, healthRows]);
@@ -160,7 +162,7 @@ export default function ActivityStatistics() {
       return {
         label: d.toLocaleDateString('en-GB', { weekday: 'short' }),
         steps: pct(recentHealth[i]?.steps ?? 0, GOALS.steps),
-        calories: pct(recentHealth[i]?.calories || r.calories, GOALS.calories),
+        calories: pct((recentHealth[i]?.calories ?? 0) + r.calories, GOALS.calories),
         activeTime: pct(r.minutes, GOALS.activeTime),
       };
     });

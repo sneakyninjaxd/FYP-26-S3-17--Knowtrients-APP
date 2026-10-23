@@ -26,19 +26,41 @@ const EXERCISE_TYPES = [
   'Other',
 ];
 
+const MAX_MINUTES = 1440;
+const MAX_KCAL = 5000;
+
 export default function AddActivities() {
   const { addActivity } = useActivities();
 
   const [name, setName] = useState('');
   const [type, setType] = useState('');
   const [duration, setDuration] = useState('');
+  const [calories, setCalories] = useState('');
   const [intensity, setIntensity] = useState('Easy');
   const [notes, setNotes] = useState('');
   const [showTypes, setShowTypes] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const minutes = Number(duration);
-  const canSubmit = type && minutes > 0 && minutes <= 1440;
+  const kcal = Number(calories);
+
+  const durationOk = minutes > 0 && minutes <= MAX_MINUTES;
+
+  // Calories are optional, so blank is fine — but a typed value must be sane.
+  const caloriesBlank = calories.trim() === '';
+  const caloriesOk = caloriesBlank || (kcal > 0 && kcal <= MAX_KCAL);
+
+  const canSubmit = Boolean(type) && durationOk && caloriesOk;
+
+  const durationError =
+    duration.trim() !== '' && !durationOk
+      ? `Enter a duration between 1 and ${MAX_MINUTES} minutes.`
+      : null;
+
+  const caloriesError =
+    !caloriesBlank && !caloriesOk
+      ? `Enter a value between 1 and ${MAX_KCAL} kcal.`
+      : null;
 
   /**
    * The API has activity_type but no separate name field, so the typed
@@ -54,6 +76,7 @@ export default function AddActivities() {
       const created = await addActivity({
         activity_type: type,
         duration_minutes: minutes,
+        calories_burned: caloriesBlank ? null : Math.round(kcal),
         intensity,
         notes: noteParts.join(' — ') || null,
         date: toLogDate(),
@@ -102,7 +125,7 @@ export default function AddActivities() {
           onChangeText={setName}
         />
 
-        {/* Type / Duration + Intensity */}
+        {/* Type / Duration / Calories + Intensity */}
         <View style={styles.row}>
           <View style={styles.field}>
             <Text style={styles.label}>Select Exercise Type</Text>
@@ -145,6 +168,23 @@ export default function AddActivities() {
               />
               <Text style={styles.unit}>min</Text>
             </View>
+            {durationError && <Text style={styles.error}>{durationError}</Text>}
+
+            <Text style={styles.label}>
+              Calories Burned <Text style={styles.optional}>(Optional)</Text>
+            </Text>
+            <View style={styles.measureInput}>
+              <TextInput
+                style={styles.measureText}
+                placeholder="e.g. 320"
+                placeholderTextColor="#60766E"
+                keyboardType="numeric"
+                value={calories}
+                onChangeText={setCalories}
+              />
+              <Text style={styles.unit}>kcal</Text>
+            </View>
+            {caloriesError && <Text style={styles.error}>{caloriesError}</Text>}
           </View>
 
           <View style={styles.field}>
@@ -220,6 +260,7 @@ const styles = StyleSheet.create({
   logo: { color: '#fff', fontSize: 19, fontWeight: '600' },
 
   divider: { height: 1, backgroundColor: '#123B2F' },
+
   title: {
     color: '#fff',
     fontSize: 32,
@@ -245,6 +286,12 @@ const styles = StyleSheet.create({
   },
 
   optional: { color: '#60766E', fontSize: 10 },
+
+  error: {
+    color: '#FF8A80',
+    fontSize: 10,
+    marginTop: 5,
+  },
 
   textField: {
     backgroundColor: '#0A1A14',
