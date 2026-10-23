@@ -65,3 +65,62 @@ All routes except `/health`, `/signup` and `/login` require
 
 Model artefacts are committed and loaded at start-up (C-04); training does not
 run on the deployment platform.
+
+
+## Nutrition catalogue
+
+The `foods` table is populated by import scripts, not by calling an external
+API at request time. Food searches in the app query this local table, so a
+user logging a meal does not depend on a third-party service being available.
+
+**Starter data** (24 placeholder entries, for development):
+
+```bash
+python ml/seed_foods.py
+```
+
+**USDA FoodData Central.** Get a free key at
+<https://fdc.nal.usda.gov/api-key-signup/>, add `USDA_API_KEY=...` to `.env`,
+then:
+
+```bash
+python ml/import_usda.py --terms-file ml/usda_terms.txt --dry-run
+python ml/import_usda.py --terms-file ml/usda_terms.txt --limit 3
+```
+
+Run the dry run first — it prints what would be imported without writing
+anything, which is the cheapest way to catch a nutrient that is coming back
+as zero.
+
+Only Foundation and SR Legacy foods are imported; the Branded dataset would
+swamp search results with commercial products. Entries are marked
+`source="USDA FoodData Central"` with the FDC id in `source_ref`, so every
+value remains traceable (constraint C-06). Re-running is safe — entries
+already present are skipped.
+
+Edit `ml/usda_terms.txt` to change what gets imported. Specific terms work
+better than general ones: "chicken breast roasted" beats "chicken".
+
+## Roles
+
+Responsibility is divided by subject matter, not seniority. Neither role
+outranks the other.
+
+**User Admin** — anything to do with accounts:
+- View, search and filter accounts
+- Suspend and reactivate, including other staff accounts
+- Change roles
+- Delete accounts
+- Handle the support request queue
+
+**Platform Manager** — anything to do with system performance:
+- Nutrition catalogue: add, correct and remove foods
+- Platform metrics: recommendation volume, confidence distribution, logging rates
+- Fairness report: recommendation mix and confidence across age and BMI groups
+
+Both roles can read the catalogue, since a User Admin answering a support
+request about a wrong nutrition value needs to look it up.
+
+Neither can suspend or delete their own account, and a User Admin cannot
+remove their own role — each would leave the system with no way to recover
+short of database access.

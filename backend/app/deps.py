@@ -42,14 +42,30 @@ def get_current_admin(
     return current_user
 
 
+def get_current_user_admin(
+    current_user: models.User = Depends(get_current_user),
+) -> models.User:
+    """
+    Restricts a route to User Admins.
+
+    The division of responsibility is by subject matter, not seniority:
+    User Admins own everything to do with accounts, so account-level authority
+    — changing roles, deleting accounts, acting on other staff accounts — sits
+    here rather than with Platform Managers.
+    """
+    if current_user.role != models.ROLE_USER_ADMIN:
+        raise HTTPException(status_code=403, detail="User Admin access required")
+    return current_user
+
+
 def get_current_platform_manager(
     current_user: models.User = Depends(get_current_user),
 ) -> models.User:
     """
     Restricts a route to Platform Managers.
 
-    Used for actions a User Admin should not be able to take on their own:
-    changing roles, deleting accounts, and managing other staff.
+    Platform Managers own system performance rather than accounts: the
+    nutrition catalogue, fairness auditing, and platform-level metrics.
     """
     if current_user.role != models.ROLE_PLATFORM_MANAGER:
         raise HTTPException(status_code=403, detail="Platform Manager access required")

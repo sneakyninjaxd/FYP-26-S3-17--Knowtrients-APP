@@ -1,0 +1,77 @@
+# Search terms for the USDA importer, one per line.
+# Lines starting with # are ignored.
+#
+#   python ml/import_usda.py --terms-file ml/usda_terms.txt --limit 3
+#
+# Keep terms specific. "chicken" returns dozens of cuts and preparations;
+# "chicken breast roasted" returns the one you want.
+
+# Staples
+rice white cooked
+rice brown cooked
+bread wholemeal
+bread white
+noodles egg cooked
+oats rolled
+
+# Protein
+chicken breast roasted
+chicken thigh roasted
+pork loin cooked
+beef mince cooked
+egg whole boiled
+salmon cooked
+tuna canned
+prawns cooked
+tofu firm
+tempeh
+
+# Vegetables
+broccoli cooked
+spinach cooked
+carrots raw
+cabbage cooked
+kale raw
+tomatoes raw
+cucumber raw
+lettuce raw
+mushrooms cooked
+bean sprouts raw
+
+# Legumes
+lentils cooked
+chickpeas cooked
+black beans cooked
+edamame cooked
+
+# Fruit
+banana raw
+apple raw
+orange raw
+papaya raw
+watermelon raw
+mango raw
+grapes raw
+
+# Dairy
+milk whole
+milk skim
+yogurt plain
+cheese cheddar
+
+# Nuts and seeds
+almonds raw
+peanuts roasted
+cashews raw
+
+# Fats and oils
+olive oil
+butter
+
+# Drinks and snacks
+coffee brewed
+tea brewed
+orange juice
+cola
+potato chips
+chocolate milk
