@@ -32,6 +32,10 @@ const avg = (values) => {
 const esc = (s) =>
   String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
 
+/** Chips plus whatever was typed in the matching "other" box. */
+const withOther = (list, other) =>
+  [...(list ?? []), other].filter(Boolean).join(', ') || '—';
+
 /**
  * A line chart as inline SVG. Days with no data are plotted as zero, which
  * is honest — a gap would imply the day didn't happen.
@@ -123,8 +127,8 @@ export async function gatherReportData(token, { days = DEFAULT_DAYS, onProgress 
   };
 
   const profile = await api.getProfile(token).catch(() => null);
+  console.log('REPORT PROFILE:', JSON.stringify(profile));
   tick();
-
   const sleepLogs = await api.listSleepLogs(token, days).catch(() => []);
   tick();
 
@@ -173,11 +177,9 @@ export function buildReportHtml(data, { sections, user }) {
         ['BMI', profile.bmi != null ? profile.bmi.toFixed(1) : '—'],
         ['Target weight', profile.target_weight_kg ? `${profile.target_weight_kg} kg` : '—'],
         ['Activity level', profile.activity_level ?? '—'],
-        ['Goals', profile.goals?.length ? profile.goals.join(', ') : '—'],
-        ['Dietary preferences', profile.dietary_preferences?.length
-          ? profile.dietary_preferences.join(', ') : '—'],
-        ['Health conditions', profile.health_conditions?.length
-          ? profile.health_conditions.join(', ') : '—'],
+        ['Goals', withOther(profile.goals, profile.other_goal)],
+        ['Dietary preferences', withOther(profile.dietary_preferences, profile.other_preference)],
+        ['Health conditions', withOther(profile.health_conditions, profile.other_condition)],
       ]
     : [];
 

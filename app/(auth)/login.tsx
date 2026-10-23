@@ -1,10 +1,11 @@
 import { brand } from '@/constants/brand';
 import { ApiError, useAuth } from '@/contexts/auth-context';
-import { Link, router } from 'expo-router';
+import { router } from 'expo-router';
 import { useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -94,11 +95,14 @@ export default function LoginScreen() {
             )}
           </Pressable>
 
-          <View style={styles.footerRow}>
-            <Text style={styles.footerText}>New here? </Text>
-            <Link href="/(auth)/signup" replace>
-              <Text style={styles.footerLink}>Create Account!</Text>
-            </Link>
+            <View style={styles.footerRow}>
+            <Text style={styles.footerText}>no account? </Text>
+            <Text
+              style={styles.footerLink}
+              onPress={() => Linking.openURL('https://knowtrients.onrender.com/index.html#register')}
+            >
+              Click here!
+            </Text>
           </View>
         </View>
       </ScrollView>

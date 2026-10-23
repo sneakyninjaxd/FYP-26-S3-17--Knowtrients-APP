@@ -1,5 +1,4 @@
 import { useAuth } from '@/contexts/auth-context';
-import { api } from '@/services/api';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useState } from 'react';
@@ -21,68 +20,18 @@ const REASONS = [
   'Other',
 ];
 
-const BUG_AREAS = [
-  { id: 'logging', label: 'Logging' },
-  { id: 'insights', label: 'Insights' },
-  { id: 'profile', label: 'Profile' },
-  { id: 'account', label: 'Account' },
-  { id: 'other', label: 'Other' },
-];
-
 export default function Account() {
   const insets = useSafeAreaInsets();
-  const { logOut, token } = useAuth();
+  const { logOut } = useAuth();
 
   const [showDelete, setShowDelete] = useState(false);
   const [reasons, setReasons] = useState([]);
   const [otherReason, setOtherReason] = useState('');
 
-  const [showBugReport, setShowBugReport] = useState(false);
-  const [bugArea, setBugArea] = useState(null);
-  const [bugDescription, setBugDescription] = useState('');
-  const [submittingBug, setSubmittingBug] = useState(false);
-  const [bugError, setBugError] = useState(null);
-  const [bugSent, setBugSent] = useState(null);
-
   const toggleReason = (item) => {
     setReasons((prev) =>
       prev.includes(item) ? prev.filter((r) => r !== item) : [...prev, item]
     );
-  };
-
-  const openBugReport = () => {
-    setBugArea(null);
-    setBugDescription('');
-    setBugError(null);
-    setBugSent(null);
-    setShowBugReport(true);
-  };
-
-  // The API needs a body of at least 3 characters.
-  const canSubmitBug = bugArea !== null && bugDescription.trim().length >= 3;
-
-  /**
-   * Lands in the admin request queue. The form has no subject field, so one
-   * is derived from the selected area.
-   */
-  const submitBug = async () => {
-    if (!token || !canSubmitBug || submittingBug) return;
-
-    setSubmittingBug(true);
-    setBugError(null);
-    try {
-      const area = BUG_AREAS.find((a) => a.id === bugArea);
-      const created = await api.createSupportRequest(token, {
-        category: 'bug_report',
-        subject: `Bug report — ${area?.label ?? 'Other'}`,
-        body: bugDescription.trim(),
-      });
-      setBugSent(created.display_id ?? `#${created.id}`);
-    } catch (err) {
-      setBugError(err?.message ?? 'Could not send your report. Please try again.');
-    } finally {
-      setSubmittingBug(false);
-    }
   };
 
   return (
@@ -122,8 +71,11 @@ export default function Account() {
           <Text style={styles.activity}>Subscription</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.activityBox} onPress={openBugReport}>
-          <Text style={styles.activity}>Report a Bug</Text>
+        <TouchableOpacity
+          style={styles.activityBox}
+          onPress={() => router.push('/account/support')}
+        >
+          <Text style={styles.activity}>Help Support</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -196,92 +148,6 @@ export default function Account() {
           </View>
         </View>
       </Modal>
-
-      {/* Bug report modal */}
-      <Modal visible={showBugReport} transparent animationType="fade">
-        <View style={styles.overlay}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Report a Bug</Text>
-
-            {bugSent ? (
-              <>
-                <Text style={styles.modalHelper}>
-                  Thanks — your report has been sent. Reference {bugSent}.
-                </Text>
-
-                <View style={styles.modalButtons}>
-                  <TouchableOpacity
-                    style={styles.submitButton}
-                    onPress={() => setShowBugReport(false)}
-                  >
-                    <Text style={styles.submitText}>Done</Text>
-                  </TouchableOpacity>
-                </View>
-              </>
-            ) : (
-              <>
-                <Text style={styles.modalHelper}>
-                  Let us know what went wrong so we can fix it.
-                </Text>
-
-                <Text style={styles.fieldLabel}>Where did it happen?</Text>
-
-                <View style={styles.chipWrap}>
-                  {BUG_AREAS.map((area) => {
-                    const active = bugArea === area.id;
-                    return (
-                      <TouchableOpacity
-                        key={area.id}
-                        onPress={() => setBugArea(area.id)}
-                        style={active ? styles.chipActive : styles.chip}
-                      >
-                        <Text style={active ? styles.chipTextActive : styles.chipText}>
-                          {area.label}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-
-                <TextInput
-                  style={styles.bugInput}
-                  placeholder="Describe what happened and what you expected..."
-                  placeholderTextColor="#60766E"
-                  multiline
-                  maxLength={5000}
-                  value={bugDescription}
-                  onChangeText={setBugDescription}
-                />
-
-                {bugError && <Text style={styles.bugError}>{bugError}</Text>}
-
-                <View style={styles.modalButtons}>
-                  <TouchableOpacity
-                    style={styles.cancelButton}
-                    onPress={() => setShowBugReport(false)}
-                  >
-                    <Text style={styles.cancelText}>Cancel</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={
-                      canSubmitBug && !submittingBug
-                        ? styles.submitButton
-                        : styles.submitDisabled
-                    }
-                    disabled={!canSubmitBug || submittingBug}
-                    onPress={submitBug}
-                  >
-                    <Text style={canSubmitBug ? styles.submitText : styles.submitTextDisabled}>
-                      {submittingBug ? 'Sending…' : 'Submit'}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </>
-            )}
-          </View>
-        </View>
-      </Modal>
     </SafeAreaView>
   );
 }
@@ -313,6 +179,7 @@ const styles = StyleSheet.create({
   logo: { color: '#fff', fontSize: 19, fontWeight: '600' },
 
   divider: { height: 1, backgroundColor: '#123B2F' },
+
   title: {
     color: '#FFFFFF',
     fontSize: 32,
@@ -381,8 +248,6 @@ const styles = StyleSheet.create({
   modalSubtitle: { color: '#D4E6DF', fontSize: 13, marginTop: 4 },
   modalHelper: { color: '#60766E', fontSize: 11, marginTop: 8, marginBottom: 16 },
 
-  fieldLabel: { color: '#D4E6DF', fontSize: 12, marginBottom: 10 },
-
   reasonBox: {
     borderWidth: 1,
     borderColor: '#123B2F',
@@ -404,39 +269,6 @@ const styles = StyleSheet.create({
     color: '#fff',
     marginTop: 4,
   },
-
-  chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 },
-
-  chip: {
-    backgroundColor: '#102A21',
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-  },
-
-  chipActive: {
-    backgroundColor: '#102A21',
-    borderWidth: 1,
-    borderColor: '#48DDB0',
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-  },
-
-  chipText: { color: '#60766E', fontSize: 11 },
-  chipTextActive: { color: '#48DDB0', fontSize: 11 },
-
-  bugInput: {
-    borderWidth: 1,
-    borderColor: '#48DDB0',
-    borderRadius: 10,
-    padding: 12,
-    height: 90,
-    textAlignVertical: 'top',
-    color: '#fff',
-  },
-
-  bugError: { color: '#E07A5F', fontSize: 11, marginTop: 10 },
 
   warning: { color: '#E05555', fontSize: 11, marginVertical: 16 },
 
@@ -461,23 +293,4 @@ const styles = StyleSheet.create({
   },
 
   deleteText: { color: '#fff', fontSize: 14, fontWeight: '600' },
-
-  submitButton: {
-    flex: 1,
-    backgroundColor: '#4ECBA0',
-    borderRadius: 8,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-
-  submitDisabled: {
-    flex: 1,
-    backgroundColor: '#123B2F',
-    borderRadius: 8,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-
-  submitText: { color: '#00382B', fontSize: 14, fontWeight: '600' },
-  submitTextDisabled: { color: '#3A5049', fontSize: 14, fontWeight: '600' },
 });

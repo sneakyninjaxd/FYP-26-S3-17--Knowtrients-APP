@@ -20,7 +20,6 @@ const PLANS = [
     price: null,
     features: [
       '1 recommendation per day',
-      'Technical explanations only',
       'View progress history for the last 7 days',
       'View regular progress charts',
       'Manual sleep input',
@@ -32,7 +31,6 @@ const PLANS = [
     price: '$10/month',
     features: [
       'Unlimited recommendations',
-      'Toggle between technical and plain-language explanations',
       'View full progress history',
       'View advanced progress charts',
       'Automatic sleep tracking',
