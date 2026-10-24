@@ -115,6 +115,9 @@ class ProfileResponse(BaseModel):
     onboarding_complete: bool = False
     age: float | None = None
     bmi: float | None = None
+    # Read from the subscriptions table. Included here because the app keeps
+    # `plan` on its profile object; previously it was held only on the phone.
+    plan: str = "free"
 
 
 # ---------------------------------------------------------------------------
@@ -478,3 +481,151 @@ class FairnessReport(BaseModel):
     by_age: list[FairnessGroup] = []
     by_bmi: list[FairnessGroup] = []
     caveat: str
+
+
+# ---------------------------------------------------------------------------
+# Subscription
+# ---------------------------------------------------------------------------
+
+
+class SubscriptionResponse(BaseModel):
+    plan: str = "free"
+    status: str = "active"
+    started_at: datetime | None = None
+    current_period_end: datetime | None = None
+    cancelled_at: datetime | None = None
+    is_premium: bool = False
+
+
+# ---------------------------------------------------------------------------
+# Recommendation feedback
+# ---------------------------------------------------------------------------
+
+
+class FeedbackCreate(BaseModel):
+    """
+    Rates one recommendation.
+
+    `recommendation_ref` is the `history_id` returned with the recommendation
+    — not `recommendation_id`, which identifies the *kind* of advice and is
+    shared by every user who received it.
+    """
+
+    domain: str = "diet"
+    recommendation_ref: int
+    rating: str
+    reason: str | None = Field(default=None, max_length=1000)
+
+    @field_validator("domain")
+    @classmethod
+    def known_domain(cls, v):
+        from .models import RECOMMENDATION_DOMAINS
+
+        if v not in RECOMMENDATION_DOMAINS:
+            raise ValueError(f"domain must be one of: {', '.join(RECOMMENDATION_DOMAINS)}")
+        return v
+
+    @field_validator("rating")
+    @classmethod
+    def known_rating(cls, v):
+        from .models import FEEDBACK_RATINGS
+
+        if v not in FEEDBACK_RATINGS:
+            raise ValueError(f"rating must be one of: {', '.join(FEEDBACK_RATINGS)}")
+        return v
+
+
+class FeedbackResponse(BaseModel):
+    id: int
+    domain: str
+    recommendation_ref: int
+    rating: str
+    reason: str | None = None
+    created_at: datetime | None = None
+
+    class Config:
+        from_attributes = True
+
+
+# ---------------------------------------------------------------------------
+# Device metrics (Health Connect)
+# ---------------------------------------------------------------------------
+
+
+class DeviceMetricsCreate(BaseModel):
+    steps: int | None = Field(default=None, ge=0, le=150000)
+    active_calories: float | None = Field(default=None, ge=0, le=20000)
+    source: str = "health_connect"
+    log_date: date | None = None
+
+
+class DeviceMetricsResponse(BaseModel):
+    log_date: date
+    steps: int | None = None
+    active_calories: float | None = None
+    source: str
+
+    class Config:
+        from_attributes = True
+
+
+# ---------------------------------------------------------------------------
+# Activity range
+# ---------------------------------------------------------------------------
+
+
+class ActivityDay(BaseModel):
+    """One day in a range, with logged activity and any synced steps."""
+
+    date: date
+    minutes: float = 0
+    calories: float = 0
+    count: int = 0
+    steps: int | None = None
+
+
+# ---------------------------------------------------------------------------
+# Fitness recommendation
+# ---------------------------------------------------------------------------
+
+
+class FitnessFactor(BaseModel):
+    feature: str
+    label: str
+    value: float
+    contribution: float
+    direction: str
+    imputed: bool = False
+
+
+class FitnessAlternative(BaseModel):
+    recommendation: str
+    confidence: float
+
+
+class FitnessRecommendationResponse(BaseModel):
+    """
+    Same core shape as the diet recommendation, so the app can render both
+    with one component, plus three fitness-specific fields:
+
+    - data_completeness: share of the week that was logged (0-1). Reported
+      separately from confidence so a barely-logged week can't pass as a
+      certain one.
+    - next_step: a concrete action sized from the user's own numbers.
+    - insight: the result shaped like an entry in the app's src/insights.js,
+      ready to replace the hardcoded Activity card.
+    """
+
+    history_id: int | None = None
+    recommendation: str
+    recommendation_id: int
+    confidence: float
+    data_completeness: float
+    explanation: list[str]
+    factors: list[FitnessFactor]
+    alternative: FitnessAlternative
+    next_step: str
+    insight: dict
+    window_start: date
+    window_end: date
+    cached: bool = False

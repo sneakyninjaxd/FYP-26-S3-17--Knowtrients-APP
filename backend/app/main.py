@@ -10,10 +10,12 @@ from .database import engine
 from .routers import (
     admin,
     auth_routes,
+    fitness,
     logs,
     platform,
     profile,
     recommendation,
+    subscription,
     support,
 )
 
@@ -44,6 +46,18 @@ async def lifespan(app: FastAPI):
     except Exception as exc:  # noqa: BLE001
         print(f"Model artefacts failed to load: {exc}")
 
+    # Loaded independently, so a missing fitness model doesn't take the diet
+    # recommendations down with it (or the reverse).
+    try:
+        from .ml import fitness_recommender
+
+        fitness_recommender._load()
+        print("Fitness model artefacts loaded.")
+    except FileNotFoundError:
+        print("Fitness model not found — fitness endpoints will return 503.")
+    except Exception as exc:  # noqa: BLE001
+        print(f"Fitness model failed to load: {exc}")
+
     yield
 
 
@@ -62,11 +76,15 @@ app.add_middleware(
 app.include_router(auth_routes.router)
 app.include_router(profile.router)
 app.include_router(logs.router)
+# The fitness router is registered before the general recommendation router
+# so its /recommendation/fitness/* paths are matched first.
+app.include_router(fitness.router)
 app.include_router(recommendation.router)
 app.include_router(admin.router)
 app.include_router(support.user_router)
 app.include_router(support.admin_router)
 app.include_router(platform.router)
+app.include_router(subscription.router)
 
 
 @app.get("/health", tags=["meta"])

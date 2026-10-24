@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from .. import models, schemas
 from ..database import get_db
 from ..deps import get_current_user
+from .subscription import effective_plan, get_subscription
 
 router = APIRouter(prefix="/profile", tags=["profile"])
 
@@ -28,9 +29,11 @@ def _split(value: str | None) -> list[str]:
     return [v for v in value.split(",") if v] if value else []
 
 
-def _to_response(profile: models.UserProfile | None) -> schemas.ProfileResponse:
+def _to_response(
+    profile: models.UserProfile | None, plan: str = "free"
+) -> schemas.ProfileResponse:
     if profile is None:
-        return schemas.ProfileResponse()
+        return schemas.ProfileResponse(plan=plan)
 
     return schemas.ProfileResponse(
         date_of_birth=profile.date_of_birth,
@@ -48,6 +51,7 @@ def _to_response(profile: models.UserProfile | None) -> schemas.ProfileResponse:
         onboarding_complete=profile.onboarding_complete,
         age=profile.age,
         bmi=profile.bmi,
+        plan=plan,
     )
 
 
@@ -57,7 +61,8 @@ def get_profile(
     db: Session = Depends(get_db),
 ):
     """Returns the profile, or an empty one if onboarding hasn't started."""
-    return _to_response(current_user.profile)
+    plan = effective_plan(get_subscription(db, current_user.id))
+    return _to_response(current_user.profile, plan)
 
 
 @router.put("", response_model=schemas.ProfileResponse)
@@ -85,4 +90,5 @@ def upsert_profile(
 
     db.commit()
     db.refresh(profile)
-    return _to_response(profile)
+    plan = effective_plan(get_subscription(db, current_user.id))
+    return _to_response(profile, plan)

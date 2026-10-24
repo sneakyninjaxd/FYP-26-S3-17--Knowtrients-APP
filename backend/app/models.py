@@ -446,3 +446,158 @@ class SupportRequest(Base):
     __table_args__ = (
         Index("ix_support_status_created", "status", "created_at"),
     )
+
+
+# ===========================================================================
+# Added for the second round of frontend features.
+#
+# Every model below is a NEW table. None of them adds a column to an existing
+# table. That is deliberate: the project has no migration tool, and
+# `create_all` creates missing tables but never alters existing ones. Keeping
+# to new tables means a deploy picks these up automatically, with no database
+# reset and no loss of existing accounts or logs.
+# ===========================================================================
+
+
+PLANS = ("free", "premium")
+SUBSCRIPTION_STATUSES = ("active", "cancelled")
+
+
+class Subscription(Base):
+    """
+    A user's plan.
+
+    One row per user, created on first upgrade. A user with no row is on the
+    free plan — the absence of a subscription *is* the free tier, so new
+    accounts need no setup.
+
+    Payment is simulated (constraint C-09). No card number, expiry, CVV or
+    any other payment detail is stored, at any point.
+    """
+
+    __tablename__ = "subscriptions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), unique=True, nullable=False
+    )
+
+    plan = Column(String, nullable=False, default="free")
+    status = Column(String, nullable=False, default="active")
+
+    started_at = Column(DateTime(timezone=True), default=utcnow)
+    current_period_end = Column(DateTime(timezone=True), nullable=True)
+    cancelled_at = Column(DateTime(timezone=True), nullable=True)
+
+    created_at = Column(DateTime(timezone=True), default=utcnow)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+RECOMMENDATION_DOMAINS = ("diet", "fitness")
+FEEDBACK_RATINGS = ("up", "down")
+
+
+class RecommendationFeedback(Base):
+    """
+    A user's rating of one recommendation, with an optional reason.
+
+    `domain` and `recommendation_ref` together identify the recommendation:
+    diet recommendations live in `recommendation_history` and fitness ones in
+    `fitness_recommendation_history`, so a single foreign key cannot point at
+    both. The pair is validated in the endpoint instead.
+
+    One row per user per recommendation. Re-rating replaces the previous
+    rating rather than adding another, so a user changing their mind is
+    counted once.
+    """
+
+    __tablename__ = "recommendation_feedback"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+
+    domain = Column(String, nullable=False)
+    recommendation_ref = Column(Integer, nullable=False)
+
+    rating = Column(String, nullable=False)  # up | down
+    reason = Column(Text, nullable=True)
+
+    created_at = Column(DateTime(timezone=True), default=utcnow)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id", "domain", "recommendation_ref", name="uq_feedback_user_rec"
+        ),
+        Index("ix_feedback_domain_rating", "domain", "rating"),
+    )
+
+
+class DeviceDailyMetrics(Base):
+    """
+    Steps and active calories synced from the user's device.
+
+    The app reads these from Google Health Connect (stretch goal D-03). They
+    were previously read on the phone and discarded; storing them lets the
+    fitness model use step counts and lets history survive a reinstall.
+
+    One row per user per day. A sync replaces the day's values rather than
+    adding to them, because Health Connect reports a running daily total — two
+    syncs on the same day would otherwise double-count.
+    """
+
+    __tablename__ = "device_daily_metrics"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    log_date = Column(Date, nullable=False, default=date.today)
+
+    steps = Column(Integer, nullable=True)
+    active_calories = Column(Float, nullable=True)
+    source = Column(String, nullable=False, default="health_connect")
+
+    created_at = Column(DateTime(timezone=True), default=utcnow)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "log_date", name="uq_device_metrics_user_date"),
+    )
+
+
+class FitnessRecommendationHistory(Base):
+    """
+    Every fitness recommendation served, with its inputs and SHAP attributions.
+
+    Kept separate from `recommendation_history` rather than adding a domain
+    column to it, so existing diet history needs no migration.
+
+    `data_completeness` records how much of the seven-day window actually had
+    logged data. It is stored alongside the model's confidence rather than
+    folded into it, so the two remain distinguishable: the model can be very
+    confident about a week that was barely logged, and the user should be
+    able to see both facts.
+    """
+
+    __tablename__ = "fitness_recommendation_history"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    log_date = Column(Date, nullable=False, default=date.today)
+
+    recommendation_id = Column(Integer, nullable=False)
+    recommendation = Column(String, nullable=False)
+    confidence = Column(Float, nullable=False)
+    data_completeness = Column(Float, nullable=False, default=0.0)
+
+    features = Column(Text, nullable=False)
+    factors = Column(Text, nullable=False)
+    explanation = Column(Text, nullable=False)
+    alternative = Column(Text, nullable=True)
+    insight = Column(Text, nullable=True)
+
+    model_version = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=utcnow, index=True)
+
+    __table_args__ = (
+        Index("ix_fitness_reco_user_date", "user_id", "log_date"),
+    )

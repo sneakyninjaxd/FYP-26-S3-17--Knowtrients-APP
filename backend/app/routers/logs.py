@@ -3,7 +3,7 @@ Logging endpoints: food, water, sleep and activity, plus the aggregated daily
 summary that the home dashboard and the recommendation engine both read.
 """
 
-from datetime import date as date_type
+from datetime import date as date_type, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func
@@ -255,6 +255,88 @@ def list_sleep_logs(
     )
 
 
+@router.delete("/logs/sleep/{log_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_sleep_log(
+    log_id: int,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Removes one night's sleep entry."""
+    entry = (
+        db.query(models.SleepLog)
+        .filter(models.SleepLog.id == log_id, models.SleepLog.user_id == current_user.id)
+        .first()
+    )
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Sleep entry not found")
+    db.delete(entry)
+    db.commit()
+
+
+# ---------------------------------------------------------------------------
+# Device metrics (Health Connect)
+# ---------------------------------------------------------------------------
+
+
+@router.put("/logs/steps", response_model=schemas.DeviceMetricsResponse)
+def sync_device_metrics(
+    payload: schemas.DeviceMetricsCreate,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Stores the day's steps and active calories read from Health Connect.
+
+    Replaces rather than adds: Health Connect reports a running total for the
+    day, so a second sync the same afternoon carries the whole day's count,
+    not just what's new. Adding would double-count.
+
+    A field sent as null is left as it was, so a sync that could read steps
+    but not calories doesn't erase a calorie figure from an earlier sync.
+    """
+    log_date = payload.log_date or date_type.today()
+    entry = (
+        db.query(models.DeviceDailyMetrics)
+        .filter(
+            models.DeviceDailyMetrics.user_id == current_user.id,
+            models.DeviceDailyMetrics.log_date == log_date,
+        )
+        .first()
+    )
+    if entry is None:
+        entry = models.DeviceDailyMetrics(user_id=current_user.id, log_date=log_date)
+        db.add(entry)
+
+    if payload.steps is not None:
+        entry.steps = payload.steps
+    if payload.active_calories is not None:
+        entry.active_calories = payload.active_calories
+    entry.source = payload.source
+
+    db.commit()
+    db.refresh(entry)
+    return entry
+
+
+@router.get("/logs/steps", response_model=list[schemas.DeviceMetricsResponse])
+def list_device_metrics(
+    days: int = Query(default=7, ge=1, le=365),
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Synced device metrics for the last N days, oldest first."""
+    start = date_type.today() - timedelta(days=days - 1)
+    return (
+        db.query(models.DeviceDailyMetrics)
+        .filter(
+            models.DeviceDailyMetrics.user_id == current_user.id,
+            models.DeviceDailyMetrics.log_date >= start,
+        )
+        .order_by(models.DeviceDailyMetrics.log_date)
+        .all()
+    )
+
+
 # ---------------------------------------------------------------------------
 # Activity
 # ---------------------------------------------------------------------------
@@ -300,6 +382,70 @@ def list_activity_logs(
         .order_by(models.ActivityLog.created_at)
         .all()
     )
+
+
+@router.get("/logs/activity/range", response_model=list[schemas.ActivityDay])
+def activity_range(
+    days: int = Query(default=7, ge=1, le=365),
+    end_date: date_type | None = None,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Per-day activity totals across a range, in one request.
+
+    Replaces the app's previous approach of calling /logs/activity once per
+    day — seven requests for a week, up to ninety for the statistics screen's
+    longest range. Steps synced from the device are included, so the
+    statistics screen's chart needs only this call.
+
+    Every day in the range is returned, including days with nothing logged,
+    so a chart can plot the range without filling gaps itself.
+    """
+    end = end_date or date_type.today()
+    start = end - timedelta(days=days - 1)
+
+    rows = (
+        db.query(
+            models.ActivityLog.log_date,
+            func.coalesce(func.sum(models.ActivityLog.duration_minutes), 0.0),
+            func.coalesce(func.sum(models.ActivityLog.calories_burned), 0.0),
+            func.count(models.ActivityLog.id),
+        )
+        .filter(
+            models.ActivityLog.user_id == current_user.id,
+            models.ActivityLog.log_date >= start,
+            models.ActivityLog.log_date <= end,
+        )
+        .group_by(models.ActivityLog.log_date)
+        .all()
+    )
+    by_date = {r[0]: r for r in rows}
+
+    steps = dict(
+        db.query(models.DeviceDailyMetrics.log_date, models.DeviceDailyMetrics.steps)
+        .filter(
+            models.DeviceDailyMetrics.user_id == current_user.id,
+            models.DeviceDailyMetrics.log_date >= start,
+            models.DeviceDailyMetrics.log_date <= end,
+        )
+        .all()
+    )
+
+    out = []
+    for offset in range(days):
+        day = start + timedelta(days=offset)
+        row = by_date.get(day)
+        out.append(
+            schemas.ActivityDay(
+                date=day,
+                minutes=float(row[1]) if row else 0.0,
+                calories=float(row[2]) if row else 0.0,
+                count=int(row[3]) if row else 0,
+                steps=steps.get(day),
+            )
+        )
+    return out
 
 
 @router.delete("/logs/activity/{log_id}", status_code=status.HTTP_204_NO_CONTENT)

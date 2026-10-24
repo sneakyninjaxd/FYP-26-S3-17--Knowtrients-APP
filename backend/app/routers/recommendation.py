@@ -14,10 +14,10 @@ Two routes, deliberately:
 import json
 from datetime import date as date_type
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from .. import ml_schemas, models
+from .. import ml_schemas, models, schemas
 from ..database import get_db
 from ..deps import get_current_user
 from ..ml import recommender
@@ -42,9 +42,12 @@ MODEL_FEATURES = (
 
 def _persist(
     db: Session, user_id: int, log_date: date_type, features: dict, result: dict
-) -> None:
-    """Stores the recommendation with its inputs and attributions."""
-    db.add(
+) -> int:
+    """
+    Stores the recommendation with its inputs and attributions, and returns
+    the new row's id — the `history_id` the app sends back with feedback.
+    """
+    row = (
         models.RecommendationHistory(
             user_id=user_id,
             log_date=log_date,
@@ -57,7 +60,10 @@ def _persist(
             alternative=json.dumps(result.get("alternative")),
         )
     )
+    db.add(row)
     db.commit()
+    db.refresh(row)
+    return row.id
 
 
 def _run(features: dict) -> dict:
@@ -81,7 +87,7 @@ def get_recommendation(
     """Recommendation from explicitly supplied feature values."""
     features = payload.model_dump()
     result = _run(features)
-    _persist(db, current_user.id, date_type.today(), features, result)
+    result["history_id"] = _persist(db, current_user.id, date_type.today(), features, result)
     return result
 
 
@@ -126,7 +132,7 @@ def get_todays_recommendation(
     features["bmi"] = float(profile.bmi)
 
     result = _run(features)
-    _persist(db, current_user.id, target, features, result)
+    result["history_id"] = _persist(db, current_user.id, target, features, result)
     return result
 
 
@@ -148,13 +154,138 @@ def recommendation_history(
     return [
         {
             "id": row.id,
+            "history_id": row.id,
             "log_date": row.log_date,
             "recommendation": row.recommendation,
             "recommendation_id": row.recommendation_id,
             "confidence": row.confidence,
             "explanation": json.loads(row.explanation),
             "factors": json.loads(row.factors),
+            "alternative": json.loads(row.alternative) if row.alternative else None,
             "created_at": row.created_at,
         }
         for row in rows
     ]
+
+
+# ---------------------------------------------------------------------------
+# Feedback
+# ---------------------------------------------------------------------------
+
+# Where each domain's recommendations are stored, for ownership checks.
+_HISTORY_TABLES = {
+    "diet": models.RecommendationHistory,
+    "fitness": models.FitnessRecommendationHistory,
+}
+
+
+def _owned_recommendation(db: Session, user_id: int, domain: str, ref: int):
+    """
+    Confirms the recommendation exists and belongs to this user.
+
+    Without this, a user could attach feedback to someone else's
+    recommendation by guessing ids, which would corrupt the feedback data
+    Platform Managers review.
+    """
+    table = _HISTORY_TABLES[domain]
+    row = (
+        db.query(table)
+        .filter(table.id == ref, table.user_id == user_id)
+        .first()
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="Recommendation not found")
+    return row
+
+
+@router.post("/feedback", response_model=schemas.FeedbackResponse)
+def submit_feedback(
+    payload: schemas.FeedbackCreate,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Records whether a recommendation was helpful.
+
+    Rating again replaces the earlier rating, so a user who changes their
+    mind is counted once rather than twice. A thumbs-down requires a reason —
+    the app already asks for one, and an unexplained negative gives a
+    Platform Manager nothing to act on.
+    """
+    _owned_recommendation(db, current_user.id, payload.domain, payload.recommendation_ref)
+
+    reason = (payload.reason or "").strip() or None
+    if payload.rating == "down" and not reason:
+        raise HTTPException(
+            status_code=400,
+            detail="Please say what was wrong with this recommendation.",
+        )
+
+    existing = (
+        db.query(models.RecommendationFeedback)
+        .filter(
+            models.RecommendationFeedback.user_id == current_user.id,
+            models.RecommendationFeedback.domain == payload.domain,
+            models.RecommendationFeedback.recommendation_ref == payload.recommendation_ref,
+        )
+        .first()
+    )
+
+    if existing is None:
+        existing = models.RecommendationFeedback(
+            user_id=current_user.id,
+            domain=payload.domain,
+            recommendation_ref=payload.recommendation_ref,
+        )
+        db.add(existing)
+
+    existing.rating = payload.rating
+    existing.reason = reason if payload.rating == "down" else None
+
+    db.commit()
+    db.refresh(existing)
+    return existing
+
+
+@router.delete("/feedback", status_code=status.HTTP_204_NO_CONTENT)
+def withdraw_feedback(
+    domain: str,
+    recommendation_ref: int,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Withdraws a rating, so a mis-tap can be undone."""
+    if domain not in _HISTORY_TABLES:
+        raise HTTPException(status_code=400, detail="Unknown domain")
+
+    entry = (
+        db.query(models.RecommendationFeedback)
+        .filter(
+            models.RecommendationFeedback.user_id == current_user.id,
+            models.RecommendationFeedback.domain == domain,
+            models.RecommendationFeedback.recommendation_ref == recommendation_ref,
+        )
+        .first()
+    )
+    if entry is None:
+        raise HTTPException(status_code=404, detail="No feedback to withdraw")
+
+    db.delete(entry)
+    db.commit()
+
+
+@router.get("/feedback", response_model=list[schemas.FeedbackResponse])
+def my_feedback(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    The user's own ratings, so the app can restore thumbs state after a
+    restart rather than showing every recommendation as unrated.
+    """
+    return (
+        db.query(models.RecommendationFeedback)
+        .filter(models.RecommendationFeedback.user_id == current_user.id)
+        .order_by(models.RecommendationFeedback.created_at.desc())
+        .all()
+    )

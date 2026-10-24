@@ -174,10 +174,15 @@ def clean_name(description: str) -> str:
 
 
 def import_term(
-    db, term: str, limit: int, api_key: str, dry_run: bool
+    db, term: str, limit: int, api_key: str, dry_run: bool, seen_names: set
 ) -> tuple[int, int, int]:
     """
     Imports up to `limit` foods matching one search term.
+
+    `seen_names` holds every name added so far in this run. The database
+    session has autoflush disabled, so an entry added a moment ago is not yet
+    visible to a query — without this set, Foundation and SR Legacy both
+    returning "Broccoli, raw" in the same search would both be inserted.
 
     Returns (added, skipped, requests_used).
     """
@@ -220,7 +225,15 @@ def import_term(
             skipped += 1
             continue
 
-        if db.query(models.Food).filter(models.Food.name == name).first():
+        # Case-insensitive, since USDA's two datasets differ in capitalisation
+        # for what is otherwise the same food.
+        name_key = name.lower()
+        if name_key in seen_names:
+            skipped += 1
+            continue
+
+        if db.query(models.Food).filter(models.Food.name.ilike(name)).first():
+            seen_names.add(name_key)
             skipped += 1
             continue
 
@@ -237,6 +250,8 @@ def import_term(
             is_verified=True,
             **nutrients,
         )
+
+        seen_names.add(name_key)
 
         if dry_run:
             print(
@@ -314,11 +329,12 @@ def main() -> None:
         print()
 
     total_added = total_skipped = total_requests = 0
+    seen_names: set[str] = set()
 
     try:
         for term in terms:
             added, skipped, requests_used = import_term(
-                db, term, args.limit, api_key, args.dry_run
+                db, term, args.limit, api_key, args.dry_run, seen_names
             )
             total_added += added
             total_skipped += skipped
