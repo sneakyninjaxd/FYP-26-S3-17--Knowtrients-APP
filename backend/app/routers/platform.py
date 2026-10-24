@@ -418,3 +418,29 @@ def feedback_summary(
 
     summary.sort(key=lambda s: (s["helpful_rate"] is None, s["helpful_rate"] or 0))
     return summary
+
+
+# ---------------------------------------------------------------------------
+# User satisfaction
+# ---------------------------------------------------------------------------
+
+
+@router.get("/satisfaction", response_model=list[schemas.SatisfactionSummary])
+def platform_satisfaction(
+    days: int = Query(default=30, ge=1, le=365),
+    db: Session = Depends(get_db),
+    _: models.User = Depends(get_current_platform_manager),
+):
+    """
+    How satisfied users are with their sleep, activity and food, across the
+    whole platform. Aggregate counts only — no individual ratings.
+    """
+    from .satisfaction import _summarise
+
+    start = date_type.today() - timedelta(days=days - 1)
+    rows = (
+        db.query(models.SatisfactionCheckin.domain, models.SatisfactionCheckin.satisfied)
+        .filter(models.SatisfactionCheckin.log_date >= start)
+        .all()
+    )
+    return _summarise(rows)

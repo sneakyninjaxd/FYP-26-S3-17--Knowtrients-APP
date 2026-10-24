@@ -396,13 +396,61 @@ class RecommendationHistory(Base):
 # Support requests
 # ---------------------------------------------------------------------------
 
+# Support categories, grouped by type. Each maps to a display label.
+#
+# The app's two support forms — account help and bug reports — each offer
+# their own list, ending in an "others" option where the user types their own
+# description. That free text is stored in the request's `subject`.
+ACCOUNT_CATEGORIES = {
+    "password": "Password",
+    "account": "Account",
+    "subscription": "Subscription",
+    "account_other": "Other account issue",
+}
+
+BUG_CATEGORIES = {
+    "bug_logging": "Logging",
+    "bug_insights": "Insights",
+    "bug_profile": "Profile",
+    "bug_account": "Account",
+    "bug_other": "Other bug",
+}
+
+# Categories used before the split into account and bug types. Still accepted
+# so existing requests, and any older app build, keep working.
+LEGACY_CATEGORIES = {
+    "password_change": ("account", "Password"),
+    "account_recovery": ("account", "Account"),
+    "bug_report": ("bug", "Bug report"),
+    "other": ("account", "Other"),
+}
+
+# "Others" categories, which require the user's own description.
+OTHER_CATEGORIES = {"account_other", "bug_other"}
+
 REQUEST_CATEGORIES = (
-    "password_change",
-    "subscription",
-    "account_recovery",
-    "bug_report",
-    "other",
+    tuple(ACCOUNT_CATEGORIES)
+    + tuple(BUG_CATEGORIES)
+    + tuple(LEGACY_CATEGORIES)
 )
+
+
+def support_type(category: str) -> str:
+    """'account' or 'bug', derived from the category — not stored separately."""
+    if category in BUG_CATEGORIES:
+        return "bug"
+    if category in ACCOUNT_CATEGORIES:
+        return "account"
+    return LEGACY_CATEGORIES.get(category, ("account", ""))[0]
+
+
+def category_label(category: str) -> str:
+    """Display label for a category, including legacy ones."""
+    if category in ACCOUNT_CATEGORIES:
+        return ACCOUNT_CATEGORIES[category]
+    if category in BUG_CATEGORIES:
+        return BUG_CATEGORIES[category]
+    return LEGACY_CATEGORIES.get(category, ("account", "Other"))[1]
 
 REQUEST_STATUSES = ("unresolved", "resolved")
 
@@ -429,6 +477,15 @@ class SupportRequest(Base):
     body = Column(Text, nullable=False)
 
     status = Column(String, nullable=False, default="unresolved", index=True)
+
+    # Bug reports only: whether the problem is still happening. Null for
+    # account requests. Added after the table existed, so the column is
+    # created by app/schema_upgrades.py rather than create_all.
+    is_persisting = Column(Boolean, nullable=True)
+
+    # When the most recent chat message was posted, for sorting the queue by
+    # activity. Also added via schema_upgrades.
+    last_message_at = Column(DateTime(timezone=True), nullable=True)
 
     # Admin response.
     reply = Column(Text, nullable=True)
@@ -600,4 +657,85 @@ class FitnessRecommendationHistory(Base):
 
     __table_args__ = (
         Index("ix_fitness_reco_user_date", "user_id", "log_date"),
+    )
+
+
+
+# ---------------------------------------------------------------------------
+# Support chat
+# ---------------------------------------------------------------------------
+
+SENDER_ROLES = ("user", "staff")
+
+
+class SupportMessage(Base):
+    """
+    One message in a support request's conversation.
+
+    Turns the single admin reply into a thread: the user and staff can go back
+    and forth on the same request. The request's original description is
+    stored as the first message, so a thread is complete on its own.
+
+    `read_at` is set when the other side opens the thread, which drives the
+    unread counts shown in the app and the admin queue.
+    """
+
+    __tablename__ = "support_messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    request_id = Column(
+        Integer, ForeignKey("support_requests.id", ondelete="CASCADE"), nullable=False
+    )
+    sender_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    sender_role = Column(String, nullable=False)  # user | staff
+
+    body = Column(Text, nullable=False)
+    read_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=utcnow, index=True)
+
+    sender = relationship("User")
+
+    __table_args__ = (
+        Index("ix_support_messages_request_created", "request_id", "created_at"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Satisfaction
+# ---------------------------------------------------------------------------
+
+SATISFACTION_DOMAINS = ("sleep", "activity", "food")
+
+
+class SatisfactionCheckin(Base):
+    """
+    Whether the user was satisfied with their sleep, activity or food.
+
+    Recorded either for a whole day (`log_ref` empty) or for one specific
+    entry — a particular meal, night or workout (`log_ref` set to that log's
+    id). The endpoint keeps one rating per user per day, or per entry, so
+    re-rating replaces rather than accumulates.
+
+    Uniqueness is enforced in the endpoint rather than by a database
+    constraint, because PostgreSQL treats NULLs as distinct: a unique index
+    over a nullable `log_ref` would allow any number of day-level ratings.
+    """
+
+    __tablename__ = "satisfaction_checkins"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+
+    domain = Column(String, nullable=False)  # sleep | activity | food
+    log_date = Column(Date, nullable=False, default=date.today)
+    log_ref = Column(Integer, nullable=True)
+
+    satisfied = Column(Boolean, nullable=False)
+    note = Column(Text, nullable=True)
+
+    created_at = Column(DateTime(timezone=True), default=utcnow)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+    __table_args__ = (
+        Index("ix_satisfaction_user_domain_date", "user_id", "domain", "log_date"),
     )

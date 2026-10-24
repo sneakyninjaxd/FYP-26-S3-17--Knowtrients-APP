@@ -378,20 +378,46 @@ class AdminDashboard(BaseModel):
 
 
 class SupportRequestCreate(BaseModel):
-    """Raised from the mobile app."""
+    """
+    Raised from the mobile app's account-help or bug-report form.
 
-    category: str = "other"
-    subject: str = Field(min_length=3, max_length=200)
+    `category` decides the type: account categories (password, account,
+    subscription, account_other) or bug categories (bug_logging,
+    bug_insights, bug_profile, bug_account, bug_other).
+
+    `subject` is optional. Left out, it defaults to the category's label. For
+    an "others" category, `other_detail` carries the user's own short
+    description of the issue and becomes the subject.
+
+    `is_persisting` applies to bug reports only and is ignored for account
+    requests.
+    """
+
+    category: str = "account_other"
+    subject: str | None = Field(default=None, min_length=3, max_length=200)
     body: str = Field(min_length=3, max_length=5000)
+    other_detail: str | None = Field(default=None, max_length=200)
+    is_persisting: bool | None = None
 
-    @field_validator("category")
+    @field_validator("category", mode="before")
     @classmethod
-    def known_category(cls, v):
+    def normalise_category(cls, v):
+        """
+        Accepts the ids the app already sends — "account-others",
+        "bug-other" — by normalising hyphens and the plural. This lets the
+        existing account form work without an app update.
+        """
         from .models import REQUEST_CATEGORIES
 
-        if v not in REQUEST_CATEGORIES:
+        if v is None:
+            return "account_other"
+
+        key = str(v).strip().lower().replace("-", "_")
+        key = {"account_others": "account_other", "bug_others": "bug_other"}.get(key, key)
+
+        if key not in REQUEST_CATEGORIES:
             raise ValueError(f"category must be one of: {', '.join(REQUEST_CATEGORIES)}")
-        return v
+        return key
 
 
 class SupportRequestReply(BaseModel):
@@ -411,6 +437,18 @@ class SupportRequestResponse(BaseModel):
     replied_at: datetime | None = None
     resolved_at: datetime | None = None
 
+    # Derived from the category, so the app and admin site can group and
+    # label requests without keeping their own category tables.
+    support_type: str = "account"          # account | bug
+    category_label: str = ""
+    is_persisting: bool | None = None
+
+    # Chat. `unread_count` is messages from the other side not yet read by
+    # whoever is asking — the user in the app, staff on the admin site.
+    message_count: int = 0
+    unread_count: int = 0
+    last_message_at: datetime | None = None
+
     # Denormalised for the admin list, which shows who raised each request.
     user_id: int
     user_display_id: str | None = None
@@ -420,6 +458,84 @@ class SupportRequestResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class SupportMessageCreate(BaseModel):
+    body: str = Field(min_length=1, max_length=5000)
+
+
+class SupportMessageResponse(BaseModel):
+    id: int
+    request_id: int
+    sender_role: str           # user | staff
+    sender_name: str | None = None
+    body: str
+    created_at: datetime | None = None
+    read_at: datetime | None = None
+    is_mine: bool = False
+
+
+class SupportThread(BaseModel):
+    """A support request with its full conversation."""
+
+    request: SupportRequestResponse
+    messages: list[SupportMessageResponse]
+
+
+# ---------------------------------------------------------------------------
+# Satisfaction
+# ---------------------------------------------------------------------------
+
+
+class SatisfactionCreate(BaseModel):
+    """
+    Rates the user's sleep, activity or food as satisfied or not.
+
+    Leave `log_ref` out to rate the whole day; set it to a specific log's id
+    to rate one meal, night or workout.
+    """
+
+    domain: str
+    satisfied: bool
+    log_date: date | None = None
+    log_ref: int | None = None
+    note: str | None = Field(default=None, max_length=1000)
+
+    @field_validator("domain")
+    @classmethod
+    def known_domain(cls, v):
+        from .models import SATISFACTION_DOMAINS
+
+        v = v.strip().lower()
+        # The app labels the activity screen "Activities".
+        v = {"activities": "activity", "meal": "food", "meals": "food"}.get(v, v)
+        if v not in SATISFACTION_DOMAINS:
+            raise ValueError(f"domain must be one of: {', '.join(SATISFACTION_DOMAINS)}")
+        return v
+
+
+class SatisfactionResponse(BaseModel):
+    id: int
+    domain: str
+    log_date: date
+    log_ref: int | None = None
+    satisfied: bool
+    note: str | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+    class Config:
+        from_attributes = True
+
+
+class SatisfactionSummary(BaseModel):
+    """Satisfaction rate for one domain over a period."""
+
+    domain: str
+    satisfied: int = 0
+    not_satisfied: int = 0
+    total: int = 0
+    satisfied_rate: float | None = None
 
 
 # ---------------------------------------------------------------------------

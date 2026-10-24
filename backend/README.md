@@ -233,6 +233,65 @@ A deploy picks these up automatically — **no database reset needed**.
 `GET /profile` now also returns `plan`, and recommendation responses include
 `history_id` for feedback.
 
+
+## Schema upgrades
+
+`create_all` creates missing tables but never alters existing ones, so adding
+a column used to mean wiping the database. `app/schema_upgrades.py` closes
+that gap for the one change that is always safe: **adding a nullable column**.
+
+On start-up it adds any column listed in `ADDITIVE_COLUMNS` that the database
+doesn't have yet. It only ever adds — never drops, renames or retypes — so it
+can't lose data. Running it repeatedly is safe.
+
+To add a column:
+
+1. Add it to the model as `nullable=True`
+2. Add an entry to `ADDITIVE_COLUMNS`
+3. Deploy
+
+Anything more involved — renames, type changes, non-nullable columns — still
+needs a proper migration tool such as Alembic.
+
+## Support, chat and satisfaction
+
+**Support requests** have two types, decided by category:
+
+| Account | Bug |
+|---|---|
+| password, account, subscription, account_other | bug_logging, bug_insights, bug_profile, bug_account, bug_other |
+
+Hyphenated ids (`account-others`, `bug-other`) are normalised, so the app's
+existing form works unchanged. The older categories (`password_change`,
+`account_recovery`, `bug_report`, `other`) are still accepted.
+
+For an "other" category, `other_detail` becomes the subject. `is_persisting`
+records whether a bug is still happening.
+
+**Chat** — each request carries a conversation in `support_messages`. Opening
+a thread marks the other side's messages as read. A user replying to a
+resolved request reopens it. Requests from before chat existed are converted
+into threads the first time they're opened.
+
+**Satisfaction** — satisfied or not, for sleep, activity or food, per day or
+per entry. Re-rating replaces.
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/support/requests/{id}/messages` | User: a request's conversation |
+| POST | `/support/requests/{id}/messages` | User: send a message |
+| GET | `/support/unread` | User: unread staff replies, for a badge |
+| GET | `/admin/requests/{id}/messages` | Staff: a request's conversation |
+| POST | `/admin/requests/{id}/messages` | Staff: message without resolving |
+| PUT | `/logs/satisfaction` | Rate a day or an entry |
+| GET | `/logs/satisfaction` | The user's ratings |
+| GET | `/logs/satisfaction/summary` | The user's satisfaction rate per domain |
+| DELETE | `/logs/satisfaction/{id}` | Withdraw a rating |
+| GET | `/platform/satisfaction` | Platform Manager: rates across all users |
+
+`GET /support/requests` and `GET /admin/requests` both accept `?type=account`
+or `?type=bug`.
+
 ## Roles
 
 Responsibility is divided by subject matter, not seniority. Neither role

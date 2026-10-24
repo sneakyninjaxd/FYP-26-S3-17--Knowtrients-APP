@@ -15,6 +15,7 @@ from .routers import (
     platform,
     profile,
     recommendation,
+    satisfaction,
     subscription,
     support,
 )
@@ -23,6 +24,14 @@ from .routers import (
 # to an existing table still needs a migration (Alembic) since create_all only
 # ever adds, never alters.
 models.Base.metadata.create_all(bind=engine)
+
+# create_all never alters an existing table, so new nullable columns on old
+# tables are added here. Additive only — see app/schema_upgrades.py.
+from .schema_upgrades import ensure_columns  # noqa: E402
+
+_added = ensure_columns(engine)
+if _added:
+    print(f"Schema upgrade: added {', '.join(_added)}")
 
 
 @asynccontextmanager
@@ -85,6 +94,7 @@ app.include_router(support.user_router)
 app.include_router(support.admin_router)
 app.include_router(platform.router)
 app.include_router(subscription.router)
+app.include_router(satisfaction.router)
 
 
 @app.get("/health", tags=["meta"])
