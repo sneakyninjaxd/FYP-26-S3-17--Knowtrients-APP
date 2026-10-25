@@ -4,10 +4,12 @@ import { createContext, useContext, useEffect, useState } from 'react';
 
 const ProfileContext = createContext(null);
 
+/**
+ * `plan` used to live here as a client-side field. It now comes from
+ * subscription-context, which reads the real subscriptions table — see
+ * useSubscription().isPremium.
+ */
 const EMPTY_PROFILE = {
-  // Not a backend field — subscription isn't in their schema yet.
-  plan: 'free',
-
   date_of_birth: null,
   gender: null,
   height_cm: null,
@@ -47,7 +49,7 @@ export function ProfileProvider({ children }) {
       setIsLoading(true);
       try {
         const data = await api.getProfile(token);
-        setProfile((prev) => ({ ...EMPTY_PROFILE, ...data, plan: prev.plan }));
+        setProfile({ ...EMPTY_PROFILE, ...data });
       } catch (err) {
         console.warn('Could not load profile', err);
       } finally {
@@ -64,13 +66,10 @@ export function ProfileProvider({ children }) {
     setProfile((prev) => ({ ...prev, ...changes }));
 
     if (!token) return;
-
-    // `plan` is local-only; sending it would be rejected by the schema.
-    const { plan, ...payload } = changes;
-    if (Object.keys(payload).length === 0) return;
+    if (Object.keys(changes).length === 0) return;
 
     try {
-      const data = await api.updateProfile(token, payload);
+      const data = await api.updateProfile(token, changes);
       setProfile((prev) => ({ ...prev, ...data }));
     } catch (err) {
       console.warn('Could not save profile', err);
