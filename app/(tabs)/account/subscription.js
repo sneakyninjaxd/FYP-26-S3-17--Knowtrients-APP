@@ -1,8 +1,9 @@
-import { useProfile } from '@/contexts/profile-context';
+import { useSubscription } from '@/contexts/subscription-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import {
+  ActivityIndicator,
   Modal,
   ScrollView,
   StyleSheet,
@@ -48,10 +49,23 @@ const formatExpiry = (value) => {
   return digits.length > 2 ? `${digits.slice(0, 2)}/${digits.slice(2)}` : digits;
 };
 
+/** "3 November 2026" — for the renewal line. */
+const formatDate = (iso) => {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleDateString('en-GB', {
+    day: 'numeric', month: 'long', year: 'numeric',
+  });
+};
+
 export default function Subscription() {
   const insets = useSafeAreaInsets();
-  const { profile, updateProfile } = useProfile();
-  const currentPlan = profile.plan;
+  const { subscription, isPremium, isLoading, error, upgrade, cancel } =
+    useSubscription();
+
+  const currentPlan = isPremium ? 'premium' : 'free';
+
   const [showCheckout, setShowCheckout] = useState(false);
   const [showCancel, setShowCancel] = useState(false);
   const [processing, setProcessing] = useState(false);
@@ -76,30 +90,36 @@ export default function Subscription() {
     cvv.length >= 3;
 
   /**
-   * Nothing is sent anywhere — there's no payment integration and no
-   * subscription field on the backend. The delay just mimics a real
-   * checkout so the flow is demonstrable.
+   * The card fields are a demonstration of the checkout flow only. Nothing
+   * typed into them is sent anywhere — the upgrade request carries no body
+   * at all, so there is nothing that could be mistaken for payment data.
    */
-  const confirmPayment = () => {
+  const confirmPayment = async () => {
     if (!canPay || processing) return;
+
     setProcessing(true);
-    setTimeout(() => {
-      updateProfile({ plan: 'premium' });
-      setProcessing(false);
-      setShowCheckout(false);
-    }, 900);
+    const ok = await upgrade();
+    setProcessing(false);
+
+    if (ok) setShowCheckout(false);
   };
 
-  const confirmCancel = () => {
-    updateProfile({ plan: 'free' });
-    setShowCancel(false);
+  const confirmCancel = async () => {
+    setProcessing(true);
+    const ok = await cancel();
+    setProcessing(false);
+
+    if (ok) setShowCancel(false);
   };
+
+  const renewsOn = formatDate(subscription?.current_period_end);
+  const cancelledOn = formatDate(subscription?.cancelled_at);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView contentContainerStyle={{ paddingBottom: 30 + insets.bottom }}>
         {/* Logo */}
-                <View style={styles.header}>
+        <View style={styles.header}>
           <View style={styles.brandRow}>
             <View style={styles.logoBadge}>
               <Text style={styles.logoGlyph}>✦</Text>
@@ -116,6 +136,16 @@ export default function Subscription() {
         <View>
           <Text style={styles.title}>Subscription</Text>
           <Text style={styles.description}>Choose your plan</Text>
+
+          {isLoading && (
+            <ActivityIndicator
+              size="small"
+              color="#4ECBA0"
+              style={{ marginBottom: 16 }}
+            />
+          )}
+
+          {error && <Text style={styles.error}>{error}</Text>}
 
           {PLANS.map((plan) => {
             const isCurrent = currentPlan === plan.id;
@@ -134,11 +164,23 @@ export default function Subscription() {
                   <Text key={f} style={styles.feature}>• {f}</Text>
                 ))}
 
+                {/* What the server actually says about this subscription. */}
+                {isCurrent && plan.id === 'premium' && (
+                  <Text style={styles.periodNote}>
+                    {cancelledOn
+                      ? `Cancelled ${cancelledOn}. Premium remains active until ${renewsOn ?? 'the end of the period'}.`
+                      : renewsOn
+                        ? `Renews on ${renewsOn}.`
+                        : ''}
+                  </Text>
+                )}
+
                 {plan.price && (
                   <View style={styles.priceRow}>
                     <Text style={styles.price}>{plan.price}</Text>
                     <TouchableOpacity
                       style={styles.planButton}
+                      disabled={isLoading}
                       onPress={isCurrent ? () => setShowCancel(true) : openCheckout}
                     >
                       <Text style={styles.planButtonText}>
@@ -159,6 +201,18 @@ export default function Subscription() {
           <ScrollView style={styles.modalCard} contentContainerStyle={{ padding: 24 }}>
             <Text style={styles.modalTitle}>Upgrade to Premium</Text>
             <Text style={styles.modalSubtitle}>$10 per month, cancel any time</Text>
+
+            {/* Says plainly that this is a demonstration, so nobody types a
+                real card number into a student project. */}
+            <View style={styles.demoNotice}>
+              <Ionicons name="information-circle-outline" size={16} color="#E0A33F" />
+              <Text style={styles.demoText}>
+                Demonstration only. No payment is taken and nothing you type
+                here is sent or stored. Please don&apos;t enter real card
+                details — use 4111 1111 1111 1111.
+              </Text>
+            </View>
+
             <Text style={styles.fieldLabel}>Name on card</Text>
             <TextInput
               style={styles.input}
@@ -205,9 +259,12 @@ export default function Subscription() {
               </View>
             </View>
 
+            {error && <Text style={styles.error}>{error}</Text>}
+
             <View style={styles.modalButtons}>
               <TouchableOpacity
                 style={styles.cancelButton}
+                disabled={processing}
                 onPress={() => setShowCheckout(false)}
               >
                 <Text style={styles.cancelText}>Cancel</Text>
@@ -235,19 +292,27 @@ export default function Subscription() {
               <Text style={styles.modalTitle}>Cancel Premium?</Text>
               <Text style={styles.modalSubtitle}>
                 You&apos;ll lose access to unlimited recommendations, plain-language
-                explanations and full history.
+                explanations and full history
+                {renewsOn ? ` after ${renewsOn}` : ''}.
               </Text>
 
               <View style={styles.modalButtons}>
                 <TouchableOpacity
                   style={styles.cancelButton}
+                  disabled={processing}
                   onPress={() => setShowCancel(false)}
                 >
                   <Text style={styles.cancelText}>Keep Premium</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.dangerButton} onPress={confirmCancel}>
-                  <Text style={styles.dangerText}>Cancel Plan</Text>
+                <TouchableOpacity
+                  style={styles.dangerButton}
+                  disabled={processing}
+                  onPress={confirmCancel}
+                >
+                  <Text style={styles.dangerText}>
+                    {processing ? 'Cancelling…' : 'Cancel Plan'}
+                  </Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -288,6 +353,7 @@ const styles = StyleSheet.create({
   logo: { color: '#fff', fontSize: 19, fontWeight: '600' },
 
   divider: { height: 1, backgroundColor: '#123B2F' },
+
   title: {
     color: '#FFFFFF',
     fontSize: 35,
@@ -303,6 +369,13 @@ const styles = StyleSheet.create({
     lineHeight: 17,
     marginBottom: 20,
     paddingLeft: 25,
+  },
+
+  error: {
+    color: '#E07A5F',
+    fontSize: 11,
+    paddingHorizontal: 25,
+    marginBottom: 12,
   },
 
   planCard: {
@@ -337,6 +410,13 @@ const styles = StyleSheet.create({
   },
 
   feature: { color: '#D4E6DF', fontSize: 12, lineHeight: 20 },
+
+  periodNote: {
+    color: '#60766E',
+    fontSize: 10,
+    lineHeight: 15,
+    marginTop: 12,
+  },
 
   priceRow: {
     flexDirection: 'row',

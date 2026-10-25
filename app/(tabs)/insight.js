@@ -1,5 +1,5 @@
 import { useAuth } from '@/contexts/auth-context';
-import { useProfile } from '@/contexts/profile-context';
+import { useSubscription } from '@/contexts/subscription-context';
 import { api, toLogDate } from '@/services/api';
 import { INSIGHTS } from '@/src/insights';
 import { Ionicons } from '@expo/vector-icons';
@@ -24,10 +24,9 @@ const PLACEHOLDER_INSIGHTS = INSIGHTS.filter(
 
 export default function Insights() {
   const { token } = useAuth();
-  const { profile } = useProfile();
 
-  // `plan` is client-side only — there's no subscription column yet.
-  const isPremium = profile?.plan === 'premium';
+  // Read from the subscriptions table rather than a client-side flag.
+  const { isPremium } = useSubscription();
 
   const [rec, setRec] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -51,7 +50,34 @@ export default function Insights() {
     setError(null);
 
     try {
-      setRec(await api.getTodaysRecommendation(token, toLogDate()));
+      const today = await api.getTodaysRecommendation(token, toLogDate());
+      setRec(today);
+      /**
+       * Restore any rating this user already gave, so a revisit doesn't show
+       * the recommendation as unrated. Keyed on history_id — recommendation_id
+       * identifies the kind of advice and is shared across users.
+       */
+      if (today?.history_id != null) {
+        try {
+          const mine = await api.listMyFeedback(token);
+          const match = mine.find(
+            (f) => f.recommendation_ref === today.history_id && f.domain === 'diet'
+          );
+
+          if (match) {
+            setFeedback((prev) => ({ ...prev, diet: match.rating }));
+            setFeedbackMessage((prev) => ({
+              ...prev,
+              diet:
+                match.rating === 'up'
+                  ? 'Thanks! Glad this recommendation was helpful.'
+                  : 'Thanks for your feedback. We’ll use it to improve recommendations.',
+            }));
+          }
+        } catch {
+          // Not worth surfacing — the recommendation itself still loaded.
+        }
+      }
     } catch (err) {
       setError(err?.message ?? 'Could not load your recommendation.');
       setRec(null);
@@ -72,11 +98,18 @@ export default function Insights() {
   };
 
   /**
-   * Records feedback for one recommendation. Thumbs down arrives here only
-   * after the user has given a reason — an unexplained negative tells us
-   * nothing useful.
+   * Only the diet card comes from the model, so only its rating can be
+   * stored. The placeholder cards have no history_id to key on and stay
+   * local until their aspects are model-backed too.
    */
-  const giveFeedback = (recommendationId, type, reason = '') => {
+  const isStorable = (key) => key === 'diet' && rec?.history_id != null;
+
+  /**
+   * Records feedback for one recommendation. Thumbs down arrives here only
+   * after the user has given a reason — the server rejects an unexplained
+   * negative, since it gives a Platform Manager nothing to act on.
+   */
+  const giveFeedback = async (recommendationId, type, reason = '') => {
     setFeedback((prev) => ({ ...prev, [recommendationId]: type }));
 
     setFeedbackMessage((prev) => ({
@@ -87,17 +120,34 @@ export default function Insights() {
           : 'Thanks for your feedback. We’ll use it to improve recommendations.',
     }));
 
-    // TODO: Send feedback to backend — no endpoint exists yet.
-    //
-    // await api.submitRecommendationFeedback(token, {
-    //   recommendationId,
-    //   feedback: type,
-    //   reason,
-    // });
+    if (!token || !isStorable(recommendationId)) return;
+
+    try {
+      await api.submitRecommendationFeedback(token, {
+        recommendation_ref: rec.history_id,
+        rating: type,
+        domain: 'diet',
+        reason: reason.trim() || null,
+      });
+    } catch (err) {
+      // Roll the button back rather than showing a rating that didn't save.
+      setFeedback((prev) => {
+        const next = { ...prev };
+        delete next[recommendationId];
+        return next;
+      });
+      setFeedbackMessage((prev) => ({
+        ...prev,
+        [recommendationId]:
+          err?.message ?? 'Could not save your feedback. Please try again.',
+      }));
+    }
   };
 
   /** Removes the recorded feedback, so a mis-tap can be undone. */
-  const clearFeedback = (recommendationId) => {
+  const clearFeedback = async (recommendationId) => {
+    const previous = feedback[recommendationId];
+
     setFeedback((prev) => {
       const next = { ...prev };
       delete next[recommendationId];
@@ -110,7 +160,19 @@ export default function Insights() {
       return next;
     });
 
-    // TODO: Withdraw the feedback on the backend once an endpoint exists.
+    if (!token || !isStorable(recommendationId)) return;
+
+    try {
+      await api.withdrawRecommendationFeedback(token, rec.history_id, 'diet');
+    } catch (err) {
+      // Put it back, so the button matches what the server holds.
+      setFeedback((prev) => ({ ...prev, [recommendationId]: previous }));
+      setFeedbackMessage((prev) => ({
+        ...prev,
+        [recommendationId]:
+          err?.message ?? 'Could not withdraw your feedback. Please try again.',
+      }));
+    }
   };
 
   /** Toggles thumbs up — a second tap on an active button clears it. */

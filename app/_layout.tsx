@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from "@/contexts/auth-context";
 import { FoodProvider } from "@/contexts/food-context";
 import { ProfileProvider } from "@/contexts/profile-context";
 import { SleepProvider } from "@/contexts/sleep-context";
+import { SubscriptionProvider } from "@/contexts/subscription-context";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { ActivityIndicator, View } from "react-native";
@@ -49,17 +50,21 @@ function RootNavigator() {
 
 export default function RootLayout() {
   return (
-<AuthProvider>
-  <ProfileProvider>
-    <ActivityProvider>
-      <SleepProvider>
-        <FoodProvider>
-          <RootNavigator />
-          <StatusBar style="auto" />
-        </FoodProvider>
-      </SleepProvider>
-    </ActivityProvider>
-  </ProfileProvider>
-</AuthProvider>
+    // SubscriptionProvider sits inside AuthProvider because it reads the
+    // token, and outside the log providers so every screen can gate on it.
+    <AuthProvider>
+      <SubscriptionProvider>
+        <ProfileProvider>
+          <ActivityProvider>
+            <SleepProvider>
+              <FoodProvider>
+                <RootNavigator />
+                <StatusBar style="auto" />
+              </FoodProvider>
+            </SleepProvider>
+          </ActivityProvider>
+        </ProfileProvider>
+      </SubscriptionProvider>
+    </AuthProvider>
   );
 }
