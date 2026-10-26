@@ -304,6 +304,79 @@ per entry. Re-rating replaces.
 `GET /support/requests` and `GET /admin/requests` both accept `?type=account`
 or `?type=bug`.
 
+
+## Sleep recommendation model
+
+The third model, alongside diet and fitness. Same approach — XGBoost with
+exact SHAP attributions — over a seven-night window.
+
+**Train it:**
+
+```bash
+python ml/train_sleep_model.py
+```
+
+**Endpoint:** `GET /recommendation/sleep/today?log_date=YYYY-MM-DD`
+
+### Inputs
+
+| Feature | From |
+|---|---|
+| avg_sleep_hours | Sleep logs, logged nights only |
+| short_nights | Nights under 6 hours |
+| duration_variability | Standard deviation of sleep length |
+| bedtime_variability | Standard deviation of bedtime, in minutes |
+| wake_variability | Standard deviation of wake time, in minutes |
+| avg_bedtime | Minutes relative to midnight (23:30 = −30, 00:45 = +45) |
+| satisfaction_rate | Share of nights rated satisfying, from sleep check-ins |
+| weekly_activity_minutes | Activity logs, moderate-equivalent |
+| age | Profile |
+
+The app sends a bedtime and wake time with every entry, so timing is
+reliable. It doesn't ask for sleep quality, so the `quality` column isn't
+used; subjective quality comes from satisfaction ratings instead.
+
+Bedtimes are measured relative to midnight so they average correctly:
+23:30, 00:30 and 01:00 average to 12:20 am. Plain clock minutes would put
+the average near midday.
+
+### Recommendations
+
+In priority order:
+
+1. **Aim for 7–9 hours a night** — average outside 7–9 hours, in either
+   direction. Long sleep is flagged as well as short.
+2. **Keep a more regular sleep schedule** — bed or wake time varying by more
+   than an hour, or sleep length by more than 1.5 hours.
+3. **Improve how restful your sleep is** — duration and timing fine, but
+   fewer than half the week's nights rated satisfying.
+4. **Sleep is on track.**
+
+The one-hour regularity threshold is a working value. Research links
+irregular timing to worse outcomes, but there's no agreed clinical cut-off.
+
+Advice about long or unrestful sleep suggests speaking to a doctor if it
+persists, rather than implying the app can resolve it (C-07).
+
+### Missing data
+
+- A night with no entry is missing, not zero sleep.
+- Spread needs at least two nights; with fewer, a typical value is assumed.
+- With no sleep ratings that week, satisfaction is assumed typical, and the
+  explanation says the user hasn't rated their sleep.
+
+### Known limitation
+
+The bedtime calculation assumes a conventional night-time sleeper. Someone
+on night shifts who sleeps from 08:00 would be read as going to bed very
+late. Shift work isn't recorded, so the model can't tell the difference.
+
+### Accuracy
+
+About 94.5% against the guideline-based labels on held-out synthetic data,
+with recall of 0.76 or better on every recommendation. As with the other
+models, this shows the pipeline works, not real-world effectiveness.
+
 ## Roles
 
 Responsibility is divided by subject matter, not seniority. Neither role

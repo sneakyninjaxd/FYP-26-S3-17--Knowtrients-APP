@@ -560,7 +560,7 @@ class Subscription(Base):
     updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 
-RECOMMENDATION_DOMAINS = ("diet", "fitness")
+RECOMMENDATION_DOMAINS = ("diet", "fitness", "sleep")
 FEEDBACK_RATINGS = ("up", "down")
 
 
@@ -748,4 +748,40 @@ class SatisfactionCheckin(Base):
 
     __table_args__ = (
         Index("ix_satisfaction_user_domain_date", "user_id", "domain", "log_date"),
+    )
+
+
+
+class SleepRecommendationHistory(Base):
+    """
+    Every sleep recommendation served, with its inputs and SHAP attributions.
+
+    A separate table, like fitness history, so no existing table needs a new
+    column. `nights_logged` records how many of the seven nights had an
+    entry, alongside `data_completeness`.
+    """
+
+    __tablename__ = "sleep_recommendation_history"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    log_date = Column(Date, nullable=False, default=date.today)
+
+    recommendation_id = Column(Integer, nullable=False)
+    recommendation = Column(String, nullable=False)
+    confidence = Column(Float, nullable=False)
+    data_completeness = Column(Float, nullable=False, default=0.0)
+    nights_logged = Column(Integer, nullable=False, default=0)
+
+    features = Column(Text, nullable=False)
+    factors = Column(Text, nullable=False)
+    explanation = Column(Text, nullable=False)
+    alternative = Column(Text, nullable=True)
+    insight = Column(Text, nullable=True)
+
+    model_version = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=utcnow, index=True)
+
+    __table_args__ = (
+        Index("ix_sleep_reco_user_date", "user_id", "log_date"),
     )

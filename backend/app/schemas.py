@@ -745,3 +745,10 @@ class FitnessRecommendationResponse(BaseModel):
     window_start: date
     window_end: date
     cached: bool = False
+
+
+
+class SleepRecommendationResponse(FitnessRecommendationResponse):
+    """Same shape as the fitness response, plus how many nights were logged."""
+
+    nights_logged: int = 0

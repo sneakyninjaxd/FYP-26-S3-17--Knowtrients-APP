@@ -338,6 +338,7 @@ def review_feedback(
     tables = {
         "diet": models.RecommendationHistory,
         "fitness": models.FitnessRecommendationHistory,
+        "sleep": models.SleepRecommendationHistory,
     }
 
     out = []
@@ -379,6 +380,7 @@ def feedback_summary(
     tables = {
         "diet": models.RecommendationHistory,
         "fitness": models.FitnessRecommendationHistory,
+        "sleep": models.SleepRecommendationHistory,
     }
 
     summary = []

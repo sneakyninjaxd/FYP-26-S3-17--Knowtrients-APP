@@ -276,13 +276,7 @@ nothing payment-related is stored.
 
 ## Note: the Sleep card
 
-The Sleep insight card is still a placeholder. Sleep data *is* now a model
-input — the fitness model uses average sleep and night-to-night variation,
-and can recommend improving sleep or prioritising recovery — but there's no
-separate sleep model producing its own card.
-
-Two options: show the fitness recommendation's sleep-related observations on
-the Sleep card, or treat a dedicated sleep model as a later addition.
+Now has its own model — see section 11.
 
 ---
 
@@ -499,3 +493,53 @@ The website needs updating too:
   from the user that staff haven't opened.
 - **Satisfaction.** Platform Managers can see aggregate rates at
   `GET /platform/satisfaction`.
+
+
+---
+
+## 11. Sleep recommendation — `insight.js`
+
+Replaces the last placeholder card. With this, all three insight cards come
+from real models.
+
+```ts
+// api.ts
+getSleepRecommendation: (token: string, logDate?: string) =>
+  request<SleepRecommendationResponse>(
+    `/recommendation/sleep/today${logDate ? `?log_date=${logDate}` : ''}`,
+    { headers: authHeaders(token) }
+  ),
+```
+
+Same response shape as the fitness recommendation, plus `nights_logged`.
+The `insight` object matches the Sleep entry in `src/insights.js` (`id:
+'sleep'`), so the existing card renders it unchanged:
+
+```js
+const [sleepRec, setSleepRec] = useState(null);
+
+try {
+  setSleepRec(await api.getSleepRecommendation(token, toLogDate()));
+} catch (err) {
+  // 409 = no date of birth, or no sleep logged this week
+}
+
+const otherInsights = [
+  ...(fitness ? [fitness.insight] : []),
+  ...(sleepRec ? [sleepRec.insight] : []),
+];
+```
+
+`PLACEHOLDER_INSIGHTS` and `src/insights.js` can then be removed entirely.
+
+**Feedback** works the same way, with `domain: 'sleep'` and the response's
+`history_id`.
+
+**Sleep satisfaction ratings feed this model.** Without them, the model
+assumes typical satisfaction and the explanation says the user hasn't rated
+their sleep — so it can't recommend improving restfulness. A quick
+"satisfied with last night?" prompt on the sleep screen (section 9) makes
+this recommendation noticeably more useful.
+
+**409 responses:** no date of birth on the profile, or no sleep logged in
+the past seven days.

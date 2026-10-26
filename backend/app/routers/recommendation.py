@@ -176,6 +176,7 @@ def recommendation_history(
 _HISTORY_TABLES = {
     "diet": models.RecommendationHistory,
     "fitness": models.FitnessRecommendationHistory,
+    "sleep": models.SleepRecommendationHistory,
 }
 
 
