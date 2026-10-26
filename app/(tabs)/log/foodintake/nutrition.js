@@ -1,4 +1,4 @@
-import { useProfile } from '@/contexts/profile-context';
+import { useSubscription } from '@/contexts/subscription-context';
 import { NUTRIENTS, positionFor } from '@/src/nutrients';
 import { RANGES } from '@/src/ranges';
 import { Ionicons } from '@expo/vector-icons';
@@ -20,8 +20,8 @@ const ZONES = [
 ];
 
 export default function NutritionSummary() {
-  const { profile } = useProfile();
-  const isPremium = profile.plan === 'premium';
+  // Read from the subscriptions table rather than a client-side flag.
+  const { isPremium } = useSubscription();
 
   const available = RANGES.filter((r) => !r.premium || isPremium);
 

@@ -4,14 +4,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import {
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -23,7 +23,7 @@ const ISSUES = [
   { id: 'password', label: 'Password' },
   { id: 'account', label: 'Account' },
   { id: 'subscription', label: 'Subscription' },
-  { id: 'account-others', label: 'others' },
+  { id: 'account_other', label: 'others' },
 ];
 
 export default function AccountSupport() {

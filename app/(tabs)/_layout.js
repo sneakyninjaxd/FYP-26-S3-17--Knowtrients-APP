@@ -54,7 +54,7 @@ export default function TabLayout() {
       <Tabs.Screen name="account/support" options={{ href: null }} />
       <Tabs.Screen name="account/support-account" options={{ href: null }} />
       <Tabs.Screen name="account/support-bug" options={{ href: null }} />
-    
+      <Tabs.Screen name="account/support-thread" options={{ href: null }} />
     </Tabs>
   );
 }

@@ -4,27 +4,28 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import {
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 /**
- * Where the bug happened. The server's category is always `bug_report`, so
- * this goes into the subject line to help whoever triages the queue.
+ * Where the bug happened. These are real server-side categories, so the
+ * admin queue can filter by area rather than parsing it out of a subject
+ * line. Anything else comes back 422.
  */
 const AREAS = [
-  { id: 'logging', label: 'Logging food, sleep or activity' },
-  { id: 'insights', label: 'Insights or recommendations' },
-  { id: 'profile', label: 'Profile or goals' },
-  { id: 'account', label: 'Account or login' },
-  { id: 'bug-other', label: 'Others' },
+  { id: 'bug_logging',  label: 'Logging food, sleep or activity' },
+  { id: 'bug_insights', label: 'Insights or recommendations' },
+  { id: 'bug_profile',  label: 'Profile or goals' },
+  { id: 'bug_account',  label: 'Account or login' },
+  { id: 'bug_other',    label: 'Others' },
 ];
 
 export default function ReportBug() {
@@ -47,8 +48,8 @@ export default function ReportBug() {
   const selectedLabel = AREAS.find((a) => a.id === area)?.label;
 
   /**
-   * There's no field for "still persisting", so it's prefixed to the body
-   * rather than lost — it's the first thing a triager wants to know.
+   * `is_persisting` is a real column now, so it goes in its own field rather
+   * than being prefixed to the body — the admin queue can sort on it.
    */
   const submit = async () => {
     if (!token || !canSubmit || submitting) return;
@@ -56,11 +57,11 @@ export default function ReportBug() {
     setSubmitting(true);
     setError(null);
     try {
-      const status = persisting ? 'Still happening' : 'No longer happening';
       const created = await api.createSupportRequest(token, {
-        category: 'bug_report',
+        category: area,
         subject: `Bug — ${selectedLabel ?? 'Somewhere else'}`,
-        body: `[${status}]\n\n${description.trim()}`,
+        body: description.trim(),
+        is_persisting: persisting,
       });
       setSent(created.display_id ?? `#${created.id}`);
     } catch (err) {
