@@ -17,9 +17,12 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-/** Placeholder aspects the model doesn't cover — sleep and activity aren't inputs. */
+/**
+ * Diet and activity both come from models now, so only sleep is left as
+ * hardcoded content — there's no sleep recommendation endpoint.
+ */
 const PLACEHOLDER_INSIGHTS = INSIGHTS.filter(
-  (i) => !/diet|nutrition|food/i.test(i.aspect)
+  (i) => !/diet|nutrition|food|activity|fitness|exercise/i.test(i.aspect)
 );
 
 export default function Insights() {
@@ -28,9 +31,12 @@ export default function Insights() {
   // Read from the subscriptions table rather than a client-side flag.
   const { isPremium } = useSubscription();
 
+  // Diet and fitness are separate models with separate history rows.
   const [rec, setRec] = useState(null);
+  const [fitnessRec, setFitnessRec] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [fitnessError, setFitnessError] = useState(null);
 
   const [selected, setSelected] = useState(null);
   const [mode, setMode] = useState('simple');
@@ -43,47 +49,70 @@ export default function Insights() {
   const [reasonTarget, setReasonTarget] = useState(null);
   const [reasonText, setReasonText] = useState('');
 
+  const thanksFor = (rating) =>
+    rating === 'up'
+      ? 'Thanks! Glad this recommendation was helpful.'
+      : 'Thanks for your feedback. We’ll use it to improve recommendations.';
+
   const loadRecommendation = useCallback(async () => {
     if (!token) return;
 
     setIsLoading(true);
     setError(null);
+    setFitnessError(null);
 
-    try {
-      const today = await api.getTodaysRecommendation(token, toLogDate());
-      setRec(today);
-      /**
-       * Restore any rating this user already gave, so a revisit doesn't show
-       * the recommendation as unrated. Keyed on history_id — recommendation_id
-       * identifies the kind of advice and is shared across users.
-       */
-      if (today?.history_id != null) {
-        try {
-          const mine = await api.listMyFeedback(token);
-          const match = mine.find(
-            (f) => f.recommendation_ref === today.history_id && f.domain === 'diet'
-          );
+    // One failing model shouldn't blank the other card.
+    const [dietResult, fitnessResult] = await Promise.allSettled([
+      api.getTodaysRecommendation(token, toLogDate()),
+      api.getTodaysFitnessRecommendation(token),
+    ]);
 
-          if (match) {
-            setFeedback((prev) => ({ ...prev, diet: match.rating }));
-            setFeedbackMessage((prev) => ({
-              ...prev,
-              diet:
-                match.rating === 'up'
-                  ? 'Thanks! Glad this recommendation was helpful.'
-                  : 'Thanks for your feedback. We’ll use it to improve recommendations.',
-            }));
-          }
-        } catch {
-          // Not worth surfacing — the recommendation itself still loaded.
-        }
-      }
-    } catch (err) {
-      setError(err?.message ?? 'Could not load your recommendation.');
-      setRec(null);
-    } finally {
-      setIsLoading(false);
+    const diet = dietResult.status === 'fulfilled' ? dietResult.value : null;
+    const fitness = fitnessResult.status === 'fulfilled' ? fitnessResult.value : null;
+
+    setRec(diet);
+    setFitnessRec(fitness);
+
+    if (dietResult.status === 'rejected') {
+      setError(dietResult.reason?.message ?? 'Could not load your recommendation.');
     }
+    if (fitnessResult.status === 'rejected') {
+      setFitnessError(
+        fitnessResult.reason?.message ?? 'Could not load your activity recommendation.'
+      );
+    }
+
+    /**
+     * Restore any ratings this user already gave, so a revisit doesn't show
+     * the recommendations as unrated. Keyed on history_id — recommendation_id
+     * identifies the kind of advice and is shared across users.
+     */
+    if (diet?.history_id != null || fitness?.history_id != null) {
+      try {
+        const mine = await api.listMyFeedback(token);
+
+        const restore = (domain, historyId) => {
+          if (historyId == null) return;
+          const match = mine.find(
+            (f) => f.recommendation_ref === historyId && f.domain === domain
+          );
+          if (!match) return;
+
+          setFeedback((prev) => ({ ...prev, [domain]: match.rating }));
+          setFeedbackMessage((prev) => ({
+            ...prev,
+            [domain]: thanksFor(match.rating),
+          }));
+        };
+
+        restore('diet', diet?.history_id);
+        restore('fitness', fitness?.history_id);
+      } catch {
+        // Not worth surfacing — the recommendations themselves still loaded.
+      }
+    }
+
+    setIsLoading(false);
   }, [token]);
 
   useFocusEffect(
@@ -98,11 +127,14 @@ export default function Insights() {
   };
 
   /**
-   * Only the diet card comes from the model, so only its rating can be
-   * stored. The placeholder cards have no history_id to key on and stay
-   * local until their aspects are model-backed too.
+   * Diet and fitness are model-backed and carry a history_id, so their
+   * ratings can be stored. The sleep card is hardcoded content with nothing
+   * in the database to attach a rating to, so its thumbs stay local.
    */
-  const isStorable = (key) => key === 'diet' && rec?.history_id != null;
+  const recFor = (key) =>
+    key === 'diet' ? rec : key === 'fitness' ? fitnessRec : null;
+
+  const isStorable = (key) => recFor(key)?.history_id != null;
 
   /**
    * Records feedback for one recommendation. Thumbs down arrives here only
@@ -114,19 +146,16 @@ export default function Insights() {
 
     setFeedbackMessage((prev) => ({
       ...prev,
-      [recommendationId]:
-        type === 'up'
-          ? 'Thanks! Glad this recommendation was helpful.'
-          : 'Thanks for your feedback. We’ll use it to improve recommendations.',
+      [recommendationId]: thanksFor(type),
     }));
 
     if (!token || !isStorable(recommendationId)) return;
 
     try {
       await api.submitRecommendationFeedback(token, {
-        recommendation_ref: rec.history_id,
+        recommendation_ref: recFor(recommendationId).history_id,
         rating: type,
-        domain: 'diet',
+        domain: recommendationId,
         reason: reason.trim() || null,
       });
     } catch (err) {
@@ -163,7 +192,11 @@ export default function Insights() {
     if (!token || !isStorable(recommendationId)) return;
 
     try {
-      await api.withdrawRecommendationFeedback(token, rec.history_id, 'diet');
+      await api.withdrawRecommendationFeedback(
+        token,
+        recFor(recommendationId).history_id,
+        recommendationId
+      );
     } catch (err) {
       // Put it back, so the button matches what the server holds.
       setFeedback((prev) => ({ ...prev, [recommendationId]: previous }));
@@ -205,9 +238,14 @@ export default function Insights() {
       ? (mode === 'technical' ? selected.reasoningTechnical : selected.reasoningSimple) ?? []
       : [];
 
+  /** Whichever model-backed card the modal is currently showing. */
+  const activeRec = selected?.fromApi ? recFor(selected.domain) : null;
+
   /** Biggest contributors first — that's the point of the SHAP ordering. */
-  const factors = rec
-    ? [...rec.factors].sort((a, b) => Math.abs(b.contribution) - Math.abs(a.contribution))
+  const factors = activeRec?.factors
+    ? [...activeRec.factors].sort(
+        (a, b) => Math.abs(b.contribution) - Math.abs(a.contribution)
+      )
     : [];
 
   const maxContribution = factors.length
@@ -304,7 +342,11 @@ export default function Insights() {
               <TouchableOpacity
                 style={styles.explainButton}
                 onPress={() =>
-                  openInsight({ fromApi: true, aspect: 'Diet & Nutrition' })
+                  openInsight({
+                    fromApi: true,
+                    domain: 'diet',
+                    aspect: 'Diet & Nutrition',
+                  })
                 }
               >
                 <Text style={styles.explainText}>
@@ -317,6 +359,59 @@ export default function Insights() {
           {!rec && !isLoading && !error && (
             <Text style={styles.conclusion}>
               Log some meals today and your recommendation will appear here.
+            </Text>
+          )}
+        </View>
+
+        {/* =====================================================
+            ACTIVITY — same model-backed shape as diet
+        ===================================================== */}
+
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Activity</Text>
+
+          {isLoading && !fitnessRec && (
+            <ActivityIndicator
+              size="small"
+              color="#4ECBA0"
+              style={{ marginVertical: 20 }}
+            />
+          )}
+
+          {fitnessError && !isLoading && (
+            <Text style={styles.errorText}>{fitnessError}</Text>
+          )}
+
+          {fitnessRec && (
+            <>
+              <Text style={styles.cardLabel}>Observations</Text>
+
+              {(fitnessRec.explanation ?? []).map((line, i) => (
+                <View key={i} style={styles.obsRow}>
+                  <Ionicons name="alert-circle" size={11} color="#E0A33F" />
+                  <Text style={styles.obsText}>{line}</Text>
+                </View>
+              ))}
+
+              <Text style={styles.cardLabel}>Conclusion</Text>
+              <Text style={styles.conclusion}>{fitnessRec.recommendation}</Text>
+
+              <TouchableOpacity
+                style={styles.explainButton}
+                onPress={() =>
+                  openInsight({ fromApi: true, domain: 'fitness', aspect: 'Activity' })
+                }
+              >
+                <Text style={styles.explainText}>
+                  Click here to view full explanation
+                </Text>
+              </TouchableOpacity>
+            </>
+          )}
+
+          {!fitnessRec && !isLoading && !fitnessError && (
+            <Text style={styles.conclusion}>
+              Log some activity and your recommendation will appear here.
             </Text>
           )}
         </View>
@@ -377,7 +472,7 @@ export default function Insights() {
                 AI RECOMMENDATION POPUP
             ================================================= */}
 
-            {selected?.fromApi && rec ? (
+            {selected?.fromApi && activeRec ? (
               <>
                 <View style={styles.modalHeader}>
                   <Text style={styles.modalAspect}>{selected.aspect}</Text>
@@ -396,12 +491,12 @@ export default function Insights() {
                     )}
 
                     <Text style={styles.confidence}>
-                      Confidence: {Math.round(rec.confidence * 100)}%
+                      Confidence: {Math.round(activeRec.confidence * 100)}%
                     </Text>
                   </View>
                 </View>
 
-                <Text style={styles.modalTitle}>{rec.recommendation}</Text>
+                <Text style={styles.modalTitle}>{activeRec.recommendation}</Text>
 
                 {/* DATA USED */}
                 <Text style={styles.modalLabel}>Data Used</Text>
@@ -456,7 +551,7 @@ export default function Insights() {
                     })}
                   </>
                 ) : (
-                  rec.explanation.map((step, i) => (
+                  (activeRec.explanation ?? []).map((step, i) => (
                     <Text key={i} style={styles.modalBody}>
                       {i + 1}. {step}
                     </Text>
@@ -466,13 +561,13 @@ export default function Insights() {
                 {/* RECOMMENDATION */}
                 <Text style={styles.modalLabel}>Recommendation</Text>
                 <View style={styles.rule} />
-                <Text style={styles.modalBody}>{rec.recommendation}</Text>
+                <Text style={styles.modalBody}>{activeRec.recommendation}</Text>
 
                 {/* ALTERNATIVE */}
-                {rec.alternative && (
+                {activeRec.alternative && (
                   <Text style={styles.modalFooter}>
-                    Alternative: {rec.alternative.recommendation} (
-                    {Math.round(rec.alternative.confidence * 100)}% confidence)
+                    Alternative: {activeRec.alternative.recommendation} (
+                    {Math.round(activeRec.alternative.confidence * 100)}% confidence)
                   </Text>
                 )}
 
@@ -486,24 +581,28 @@ export default function Insights() {
                     <TouchableOpacity
                       style={[
                         styles.feedbackButton,
-                        feedback.diet === 'up' && styles.feedbackButtonSelected,
+                        feedback[selected.domain] === 'up' &&
+                          styles.feedbackButtonSelected,
                       ]}
-                      onPress={() => toggleUp('diet')}
+                      onPress={() => toggleUp(selected.domain)}
                     >
                       <Ionicons
                         name={
-                          feedback.diet === 'up'
+                          feedback[selected.domain] === 'up'
                             ? 'thumbs-up'
                             : 'thumbs-up-outline'
                         }
                         size={20}
-                        color={feedback.diet === 'up' ? '#020D09' : '#48DDB0'}
+                        color={
+                          feedback[selected.domain] === 'up' ? '#020D09' : '#48DDB0'
+                        }
                       />
 
                       <Text
                         style={[
                           styles.feedbackText,
-                          feedback.diet === 'up' && styles.feedbackTextSelected,
+                          feedback[selected.domain] === 'up' &&
+                            styles.feedbackTextSelected,
                         ]}
                       >
                         Helpful
@@ -513,24 +612,28 @@ export default function Insights() {
                     <TouchableOpacity
                       style={[
                         styles.feedbackButton,
-                        feedback.diet === 'down' && styles.feedbackButtonSelected,
+                        feedback[selected.domain] === 'down' &&
+                          styles.feedbackButtonSelected,
                       ]}
-                      onPress={() => toggleDown('diet')}
+                      onPress={() => toggleDown(selected.domain)}
                     >
                       <Ionicons
                         name={
-                          feedback.diet === 'down'
+                          feedback[selected.domain] === 'down'
                             ? 'thumbs-down'
                             : 'thumbs-down-outline'
                         }
                         size={20}
-                        color={feedback.diet === 'down' ? '#020D09' : '#E07A5F'}
+                        color={
+                          feedback[selected.domain] === 'down' ? '#020D09' : '#E07A5F'
+                        }
                       />
 
                       <Text
                         style={[
                           styles.feedbackText,
-                          feedback.diet === 'down' && styles.feedbackTextSelected,
+                          feedback[selected.domain] === 'down' &&
+                            styles.feedbackTextSelected,
                         ]}
                       >
                         Not helpful
@@ -538,9 +641,9 @@ export default function Insights() {
                     </TouchableOpacity>
                   </View>
 
-                  {feedbackMessage.diet && (
+                  {feedbackMessage[selected.domain] && (
                     <Text style={styles.feedbackMessage}>
-                      {feedbackMessage.diet}
+                      {feedbackMessage[selected.domain]}
                     </Text>
                   )}
                 </View>

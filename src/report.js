@@ -5,7 +5,6 @@
  * natively in the PDF, so there's nothing to upload or encode.
  */
 import { api, toLogDate } from '@/services/api';
-import { readRange } from '@/src/health';
 
 const DEFAULT_DAYS = 30;
 
@@ -113,12 +112,15 @@ function chartBlock(title, values, options) {
 }
 
 /**
- * Collects everything the report needs. Slow: roughly two API calls per day
- * in the range, since food and activity have no date-range endpoint.
+ * Collects everything the report needs.
+ *
+ * Activity, sleep and device metrics each come from one range call. Only the
+ * daily summary is still per-day, because there's no range endpoint for it —
+ * so a month is ~30 calls rather than the ~60 it used to be.
  */
 export async function gatherReportData(token, { days = DEFAULT_DAYS, onProgress } = {}) {
   const dates = recentDates(days);
-  const total = dates.length * 2 + 2;
+  const total = dates.length + 4;
   let done = 0;
 
   const tick = () => {
@@ -126,10 +128,16 @@ export async function gatherReportData(token, { days = DEFAULT_DAYS, onProgress 
     onProgress?.(Math.round((done / total) * 100));
   };
 
-  const profile = await api.getProfile(token).catch(() => null);
-  console.log('REPORT PROFILE:', JSON.stringify(profile));
+  const [profile, sleepLogs, activityRange, deviceMetrics] = await Promise.all([
+    api.getProfile(token).catch(() => null),
+    api.listSleepLogs(token, days).catch(() => []),
+    api.getActivityRange(token, days).catch(() => []),
+    api.listDeviceMetrics(token, days).catch(() => []),
+  ]);
+
   tick();
-  const sleepLogs = await api.listSleepLogs(token, days).catch(() => []);
+  tick();
+  tick();
   tick();
 
   const summaries = [];
@@ -138,24 +146,37 @@ export async function gatherReportData(token, { days = DEFAULT_DAYS, onProgress 
     tick();
   }
 
-  const activityDays = [];
-  for (const d of dates) {
-    const logs = await api.listActivityLogs(token, toLogDate(d)).catch(() => []);
-    activityDays.push(logs.reduce((s, a) => s + (a.duration_minutes ?? 0), 0));
-    tick();
+  /**
+   * Both ranges are keyed by date rather than position, because a day with
+   * nothing logged may be missing from either list — lining them up by index
+   * would silently shift every later day.
+   */
+  const minutesByDate = new Map(
+    (activityRange ?? []).map((a) => [a.date, a.minutes ?? 0])
+  );
+
+  const stepsByDate = new Map(
+    (deviceMetrics ?? []).map((m) => [m.log_date, m.steps ?? 0])
+  );
+
+  // Activity rows carry steps too, for days synced before this endpoint.
+  for (const a of activityRange ?? []) {
+    if (a.steps != null && !stepsByDate.has(a.date)) {
+      stepsByDate.set(a.date, a.steps);
+    }
   }
 
-  const health = await readRange(days).catch(() => null);
+  const activityDays = dates.map((d) => minutesByDate.get(toLogDate(d)) ?? 0);
+  const steps = dates.map((d) => stepsByDate.get(toLogDate(d)) ?? 0);
 
-  return { days, dates, profile, sleepLogs, summaries, activityDays, health };
+  return { days, dates, profile, sleepLogs, summaries, activityDays, steps };
 }
 
 /** Renders the gathered data as a printable HTML document. */
 export function buildReportHtml(data, { sections, user }) {
-  const { days, dates, profile, sleepLogs, summaries, activityDays, health } = data;
+  const { days, dates, profile, sleepLogs, summaries, activityDays, steps } = data;
 
   const calories = summaries.map((s) => Math.round(s?.totals?.calories ?? 0));
-  const steps = dates.map((_, i) => health?.[i]?.steps ?? 0);
   const sleepByDate = new Map((sleepLogs ?? []).map((s) => [s.log_date, s.hours]));
   const sleep = dates.map((d) => sleepByDate.get(toLogDate(d)) ?? 0);
 
@@ -282,9 +303,10 @@ export function buildReportHtml(data, { sections, user }) {
       <strong>About this report.</strong>
       This document summarises data you logged in Knowtrients over the
       ${esc(rangeLabel)}. Food entries and portion sizes are self-reported, so
-      nutrition figures are estimates. Step and activity data is read from
-      Health Connect and depends on which apps or devices you have connected;
-      days before you connected a source will show as zero.
+      nutrition figures are estimates. Step data comes from Health Connect on
+      your phone and is stored as you use the app, so days before you
+      connected a source &mdash; or days you didn&rsquo;t open Knowtrients
+      &mdash; will show as zero.
       Knowtrients&rsquo; recommendations consider nutrition and hydration only
       &mdash; they do not account for sleep or exercise.
       <br /><br />

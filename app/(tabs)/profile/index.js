@@ -1,5 +1,5 @@
 import { useAuth } from '@/contexts/auth-context';
-import { useProfile } from '@/contexts/profile-context';
+import { useSubscription } from '@/contexts/subscription-context';
 import { buildReportHtml, gatherReportData } from '@/src/report';
 import { Ionicons } from '@expo/vector-icons';
 import * as Print from 'expo-print';
@@ -28,8 +28,9 @@ const REPORT_RANGES = [
 
 export default function Profile() {
   const { token, user } = useAuth();
-  const { profile } = useProfile();
-  const isPremium = profile.plan === 'premium';
+
+  // Read from the subscriptions table rather than a client-side flag.
+  const { isPremium } = useSubscription();
 
   const [showReport, setShowReport] = useState(false);
   const [selected, setSelected] = useState([]);

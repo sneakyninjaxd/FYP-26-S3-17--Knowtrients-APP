@@ -1,6 +1,7 @@
 import { useActivities } from '@/contexts/activity-context';
+import { useAuth } from '@/contexts/auth-context';
 import { toLogDate } from '@/services/api';
-import { initHealth, readDay, readWeek } from '@/src/health';
+import { initHealth, readWeek, syncDay } from '@/src/health';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { router, useFocusEffect } from 'expo-router';
@@ -60,6 +61,7 @@ function Bar({ label, value, goal, unit, color }) {
 
 export default function Activities() {
   const { activities, weekly, loadActivities, loadWeek, deleteActivity } = useActivities();
+  const { token } = useAuth();
   const [date, setDate] = useState(new Date());
   const [showPicker, setShowPicker] = useState(false);
 
@@ -79,12 +81,14 @@ export default function Activities() {
         setHealthStatus(status);
 
         if (status === 'ready') {
-          setHealth(await readDay(date));
+          // syncDay reads as readDay does, then stores the figures server-side
+          // so they outlive what Health Connect keeps.
+          setHealth(await syncDay(token, date));
           setHealthWeek(await readWeek(date));
         }
       })();
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [date])
+    }, [date, token])
   );
 
   /**

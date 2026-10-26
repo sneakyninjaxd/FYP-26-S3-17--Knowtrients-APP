@@ -16,8 +16,11 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 /** Server statuses, styled so an answered request is obvious at a glance. */
 const STATUS_STYLE = {
   resolved: { label: 'Resolved', colour: '#4ECBA0' },
-  open: { label: 'Ongoing', colour: '#E0A33F' },
+  in_progress: { label: 'In progress', colour: '#48DDB0' },
+  unresolved: { label: 'Ongoing', colour: '#E0A33F' },
 };
+
+const FALLBACK_STATUS = STATUS_STYLE.unresolved;
 
 const formatWhen = (iso) => {
   if (!iso) return '';
@@ -117,18 +120,36 @@ export default function HelpSupport() {
         {requests.length > 0 && (
           <View style={styles.listCard}>
             {requests.map((r, i) => {
-              const status = STATUS_STYLE[r.status] ?? STATUS_STYLE.open;
+              const status = STATUS_STYLE[r.status] ?? FALLBACK_STATUS;
+              const unread = r.unread_count ?? 0;
+              const replies = r.message_count ?? 0;
+
               return (
                 <TouchableOpacity
                   key={r.id}
                   style={[styles.requestRow, i > 0 && styles.requestRowDivided]}
-                  onPress={() => router.push(`/account/support/${r.id}`)}
+                  onPress={() =>
+                    router.push({
+                      pathname: '/account/support-thread',
+                      params: { id: r.id },
+                    })
+                  }
                 >
                   <View style={styles.requestTop}>
                     <Text style={styles.requestSubject} numberOfLines={1}>
                       {r.subject}
                     </Text>
-                    <Text style={styles.requestWhen}>{formatWhen(r.created_at)}</Text>
+
+                    {/* An unseen reply is the only thing worth interrupting for. */}
+                    {unread > 0 && (
+                      <View style={styles.unreadBadge}>
+                        <Text style={styles.unreadText}>{unread}</Text>
+                      </View>
+                    )}
+
+                    <Text style={styles.requestWhen}>
+                      {formatWhen(r.last_message_at ?? r.created_at)}
+                    </Text>
                   </View>
 
                   <Text style={styles.requestBody} numberOfLines={2}>
@@ -140,9 +161,15 @@ export default function HelpSupport() {
                     <Text style={[styles.statusText, { color: status.colour }]}>
                       {status.label}
                     </Text>
-                    {r.reply ? (
-                      <Text style={styles.repliedTag}>· replied</Text>
-                    ) : null}
+
+                    {replies > 0 && (
+                      <Text style={styles.repliedTag}>
+                        · {replies} message{replies === 1 ? '' : 's'}
+                      </Text>
+                    )}
+
+                    <View style={{ flex: 1 }} />
+                    <Ionicons name="chevron-forward" size={12} color="#3A5049" />
                   </View>
                 </TouchableOpacity>
               );
@@ -248,6 +275,17 @@ const styles = StyleSheet.create({
 
   requestSubject: { color: '#fff', fontSize: 13, fontWeight: '600', flex: 1 },
   requestWhen: { color: '#60766E', fontSize: 9 },
+
+  unreadBadge: {
+    backgroundColor: '#4ECBA0',
+    borderRadius: 9,
+    minWidth: 18,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    alignItems: 'center',
+  },
+
+  unreadText: { color: '#00382B', fontSize: 9, fontWeight: '700' },
 
   requestBody: { color: '#60766E', fontSize: 10, lineHeight: 14, marginTop: 6 },
 
