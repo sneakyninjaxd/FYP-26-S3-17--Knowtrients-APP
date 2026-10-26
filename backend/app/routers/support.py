@@ -77,7 +77,7 @@ def _to_response(
         created_at=request.created_at,
         replied_at=request.replied_at,
         resolved_at=request.resolved_at,
-        support_type=models.support_type(request.category),
+        support_type=request.support_type or models.support_type(request.category),
         category_label=models.category_label(request.category),
         is_persisting=request.is_persisting,
         message_count=total,
@@ -254,6 +254,7 @@ def create_request(
         category=category,
         subject=subject[:200],
         body=payload.body.strip(),
+        support_type=kind,
         is_persisting=payload.is_persisting if kind == "bug" else None,
         last_message_at=models.utcnow(),
     )
@@ -282,9 +283,14 @@ def list_my_requests(
     db: Session = Depends(get_db),
 ):
     """The user's own requests, newest activity first, with unread counts."""
+    query = db.query(models.SupportRequest).filter(
+        models.SupportRequest.user_id == current_user.id
+    )
+    if support_type in ("account", "bug"):
+        query = query.filter(models.SupportRequest.support_type == support_type)
+
     rows = (
-        db.query(models.SupportRequest)
-        .filter(models.SupportRequest.user_id == current_user.id)
+        query
         .order_by(
             func.coalesce(
                 models.SupportRequest.last_message_at, models.SupportRequest.created_at
@@ -292,9 +298,6 @@ def list_my_requests(
         )
         .all()
     )
-    if support_type:
-        rows = [r for r in rows if models.support_type(r.category) == support_type]
-
     counts = _message_counts(db, [r.id for r in rows], "user")
     return [_to_response(r, counts.get(r.id, (0, 0))) for r in rows]
 
@@ -407,15 +410,7 @@ def list_requests(
         query = query.filter(models.SupportRequest.status == status_filter.lower())
 
     if support_type in ("account", "bug"):
-        wanted = (
-            list(models.BUG_CATEGORIES)
-            if support_type == "bug"
-            else list(models.ACCOUNT_CATEGORIES)
-        )
-        wanted += [
-            c for c, (kind, _) in models.LEGACY_CATEGORIES.items() if kind == support_type
-        ]
-        query = query.filter(models.SupportRequest.category.in_(wanted))
+        query = query.filter(models.SupportRequest.support_type == support_type)
 
     if q:
         pattern = f"%{q.strip()}%"

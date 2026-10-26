@@ -36,6 +36,7 @@ from sqlalchemy.engine import Engine
 # (table, column, SQL type). Types must be valid in both PostgreSQL and
 # SQLite — BOOLEAN, INTEGER, TEXT, VARCHAR, FLOAT and TIMESTAMP all are.
 ADDITIVE_COLUMNS: list[tuple[str, str, str]] = [
+    ("support_requests", "support_type", "VARCHAR(20)"),
     ("support_requests", "is_persisting", "BOOLEAN"),
     ("support_requests", "last_message_at", "TIMESTAMP"),
 ]
@@ -67,3 +68,71 @@ def ensure_columns(engine: Engine) -> list[str]:
             added.append(f"{table}.{column}")
 
     return added
+
+
+# Indexes on columns added above. create_all only builds indexes when it
+# creates a table, so an index on an added column has to be made here too.
+# CREATE INDEX IF NOT EXISTS is valid in both PostgreSQL and SQLite.
+ADDITIVE_INDEXES: list[tuple[str, str, str]] = [
+    ("ix_support_requests_support_type", "support_requests", "support_type"),
+]
+
+
+def ensure_indexes(engine: Engine) -> None:
+    """Creates any listed index that is missing. Safe to repeat."""
+    inspector = inspect(engine)
+    tables = set(inspector.get_table_names())
+    with engine.begin() as conn:
+        for name, table, column in ADDITIVE_INDEXES:
+            if table not in tables:
+                continue
+            conn.execute(text(f"CREATE INDEX IF NOT EXISTS {name} ON {table} ({column})"))
+
+
+def backfill_support_type(engine: Engine) -> int:
+    """
+    Fills in `support_type` for requests created before the column existed.
+
+    Only touches rows where it is still empty, so it does nothing after the
+    first run. Returns how many rows it updated.
+
+    The category lists come from the model, so this stays in step with them.
+    """
+    from . import models
+
+    inspector = inspect(engine)
+    if "support_requests" not in inspector.get_table_names():
+        return 0
+    if "support_type" not in {c["name"] for c in inspector.get_columns("support_requests")}:
+        return 0
+
+    bug = list(models.BUG_CATEGORIES) + [
+        c for c, (kind, _) in models.LEGACY_CATEGORIES.items() if kind == "bug"
+    ]
+
+    updated = 0
+    with engine.begin() as conn:
+        # Bound parameters for the values; the IN list is built from
+        # placeholders, never from interpolated strings.
+        params = {f"c{i}": c for i, c in enumerate(bug)}
+        placeholders = ", ".join(f":{k}" for k in params)
+
+        result = conn.execute(
+            text(
+                f"UPDATE support_requests SET support_type = 'bug' "
+                f"WHERE support_type IS NULL AND category IN ({placeholders})"
+            ),
+            params,
+        )
+        updated += result.rowcount or 0
+
+        # Everything else is an account request.
+        result = conn.execute(
+            text(
+                "UPDATE support_requests SET support_type = 'account' "
+                "WHERE support_type IS NULL"
+            )
+        )
+        updated += result.rowcount or 0
+
+    return updated

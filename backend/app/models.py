@@ -478,6 +478,16 @@ class SupportRequest(Base):
 
     status = Column(String, nullable=False, default="unresolved", index=True)
 
+    # "account" or "bug". Stored rather than worked out from the category each
+    # time, so the two kinds of request are separable directly in the
+    # database — in DBeaver, in reports, and in queries — and can be filtered
+    # with an index instead of a list of categories.
+    #
+    # Always set by the server from the category, never accepted from the
+    # client, so it can't disagree with the category. Existing rows are
+    # filled in at start-up by app/schema_upgrades.py.
+    support_type = Column(String, nullable=True, index=True)
+
     # Bug reports only: whether the problem is still happening. Null for
     # account requests. Added after the table existed, so the column is
     # created by app/schema_upgrades.py rather than create_all.

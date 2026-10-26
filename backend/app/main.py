@@ -27,11 +27,19 @@ models.Base.metadata.create_all(bind=engine)
 
 # create_all never alters an existing table, so new nullable columns on old
 # tables are added here. Additive only — see app/schema_upgrades.py.
-from .schema_upgrades import ensure_columns  # noqa: E402
+from .schema_upgrades import (  # noqa: E402
+    backfill_support_type,
+    ensure_columns,
+    ensure_indexes,
+)
 
 _added = ensure_columns(engine)
 if _added:
     print(f"Schema upgrade: added {', '.join(_added)}")
+ensure_indexes(engine)
+_filled = backfill_support_type(engine)
+if _filled:
+    print(f"Schema upgrade: set support_type on {_filled} existing request(s)")
 
 
 @asynccontextmanager

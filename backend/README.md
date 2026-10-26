@@ -255,7 +255,8 @@ needs a proper migration tool such as Alembic.
 
 ## Support, chat and satisfaction
 
-**Support requests** have two types, decided by category:
+**Support requests** have two types, stored in the `support_type` column
+(`account` or `bug`) and decided by category:
 
 | Account | Bug |
 |---|---|
@@ -264,6 +265,17 @@ needs a proper migration tool such as Alembic.
 Hyphenated ids (`account-others`, `bug-other`) are normalised, so the app's
 existing form works unchanged. The older categories (`password_change`,
 `account_recovery`, `bug_report`, `other`) are still accepted.
+
+`support_type` is set by the server from the category and never accepted from
+the client, so the two can't disagree. It's indexed, so filtering by type is
+fast, and it's visible directly in the database:
+
+```sql
+SELECT support_type, COUNT(*) FROM support_requests GROUP BY support_type;
+```
+
+Requests created before the column existed are filled in automatically at
+start-up.
 
 For an "other" category, `other_detail` becomes the subject. `is_persisting`
 records whether a bug is still happening.
