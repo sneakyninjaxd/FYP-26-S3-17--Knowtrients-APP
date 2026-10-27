@@ -18,12 +18,47 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 /**
- * Diet and activity both come from models now, so only sleep is left as
- * hardcoded content — there's no sleep recommendation endpoint.
+ * All three aspects are model-backed now, so the hardcoded content only
+ * shows for an aspect whose endpoint is unreachable.
  */
 const PLACEHOLDER_INSIGHTS = INSIGHTS.filter(
-  (i) => !/diet|nutrition|food|activity|fitness|exercise/i.test(i.aspect)
+  (i) => !/diet|nutrition|food|activity|fitness|exercise|sleep/i.test(i.aspect)
 );
+
+/** The three model-backed aspects, in the order they appear. */
+const MODEL_CARDS = [
+  {
+    domain: 'diet',
+    aspect: 'Diet & Nutrition',
+    emptyHint: 'Log some meals today and your recommendation will appear here.',
+  },
+  {
+    domain: 'fitness',
+    aspect: 'Activity',
+    emptyHint: 'Log some activity and your recommendation will appear here.',
+  },
+  {
+    domain: 'sleep',
+    aspect: 'Sleep',
+    emptyHint: 'Log a few nights and your recommendation will appear here.',
+  },
+];
+
+/** "20–26 Oct" — the window a weekly recommendation was built from. */
+const formatWindow = (start, end) => {
+  if (!start || !end) return null;
+
+  const a = new Date(start);
+  const b = new Date(end);
+  if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return null;
+
+  const sameMonth = a.getMonth() === b.getMonth();
+  const left = a.toLocaleDateString('en-GB',
+    sameMonth ? { day: 'numeric' } : { day: 'numeric', month: 'short' });
+  const right = b.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+
+  return `${left}–${right}`;
+};
 
 export default function Insights() {
   const { token } = useAuth();
@@ -31,12 +66,14 @@ export default function Insights() {
   // Read from the subscriptions table rather than a client-side flag.
   const { isPremium } = useSubscription();
 
-  // Diet and fitness are separate models with separate history rows.
+  // Each aspect is its own model with its own history rows.
   const [rec, setRec] = useState(null);
   const [fitnessRec, setFitnessRec] = useState(null);
+  const [sleepRec, setSleepRec] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [fitnessError, setFitnessError] = useState(null);
+  const [sleepError, setSleepError] = useState(null);
 
   const [selected, setSelected] = useState(null);
   const [mode, setMode] = useState('simple');
@@ -60,18 +97,22 @@ export default function Insights() {
     setIsLoading(true);
     setError(null);
     setFitnessError(null);
+    setSleepError(null);
 
-    // One failing model shouldn't blank the other card.
-    const [dietResult, fitnessResult] = await Promise.allSettled([
+    // One failing model shouldn't blank the other cards.
+    const [dietResult, fitnessResult, sleepResult] = await Promise.allSettled([
       api.getTodaysRecommendation(token, toLogDate()),
       api.getTodaysFitnessRecommendation(token),
+      api.getTodaysSleepRecommendation(token),
     ]);
 
     const diet = dietResult.status === 'fulfilled' ? dietResult.value : null;
     const fitness = fitnessResult.status === 'fulfilled' ? fitnessResult.value : null;
+    const sleep = sleepResult.status === 'fulfilled' ? sleepResult.value : null;
 
     setRec(diet);
     setFitnessRec(fitness);
+    setSleepRec(sleep);
 
     if (dietResult.status === 'rejected') {
       setError(dietResult.reason?.message ?? 'Could not load your recommendation.');
@@ -81,13 +122,22 @@ export default function Insights() {
         fitnessResult.reason?.message ?? 'Could not load your activity recommendation.'
       );
     }
+    if (sleepResult.status === 'rejected') {
+      setSleepError(
+        sleepResult.reason?.message ?? 'Could not load your sleep recommendation.'
+      );
+    }
 
     /**
      * Restore any ratings this user already gave, so a revisit doesn't show
      * the recommendations as unrated. Keyed on history_id — recommendation_id
      * identifies the kind of advice and is shared across users.
      */
-    if (diet?.history_id != null || fitness?.history_id != null) {
+    if (
+      diet?.history_id != null ||
+      fitness?.history_id != null ||
+      sleep?.history_id != null
+    ) {
       try {
         const mine = await api.listMyFeedback(token);
 
@@ -107,6 +157,7 @@ export default function Insights() {
 
         restore('diet', diet?.history_id);
         restore('fitness', fitness?.history_id);
+        restore('sleep', sleep?.history_id);
       } catch {
         // Not worth surfacing — the recommendations themselves still loaded.
       }
@@ -127,14 +178,41 @@ export default function Insights() {
   };
 
   /**
-   * Diet and fitness are model-backed and carry a history_id, so their
-   * ratings can be stored. The sleep card is hardcoded content with nothing
-   * in the database to attach a rating to, so its thumbs stay local.
+   * A rating can only be stored against a real recommendation, so the test
+   * is simply whether this aspect came back with a history_id.
    */
   const recFor = (key) =>
-    key === 'diet' ? rec : key === 'fitness' ? fitnessRec : null;
+    key === 'diet'
+      ? rec
+      : key === 'fitness'
+        ? fitnessRec
+        : key === 'sleep'
+          ? sleepRec
+          : null;
 
   const isStorable = (key) => recFor(key)?.history_id != null;
+
+  const errorFor = (key) =>
+    key === 'diet' ? error : key === 'fitness' ? fitnessError : sleepError;
+
+  /**
+   * How much of the window the advice rests on. `nights_logged` is exact and
+   * worth saying plainly; `data_completeness` is the model's own coverage
+   * figure, which is only worth showing when it's low enough to matter.
+   */
+  const coverageNote = (r) => {
+    if (!r) return null;
+
+    if (typeof r.nights_logged === 'number' && r.nights_logged > 0) {
+      return `${r.nights_logged} of 7 nights`;
+    }
+
+    if (typeof r.data_completeness === 'number' && r.data_completeness < 0.99) {
+      return `${Math.round(r.data_completeness * 100)}% of expected data`;
+    }
+
+    return null;
+  };
 
   /**
    * Records feedback for one recommendation. Thumbs down arrives here only
@@ -307,114 +385,76 @@ export default function Insights() {
         </View>
 
         {/* =====================================================
-            DIET & NUTRITION
+            MODEL-BACKED ASPECTS — all three share one card, so a
+            change to how recommendations read happens once.
         ===================================================== */}
 
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Diet &amp; Nutrition</Text>
+        {MODEL_CARDS.map(({ domain, aspect, emptyHint }) => {
+          const cardRec = recFor(domain);
+          const cardError = errorFor(domain);
 
-          {isLoading && !rec && (
-            <ActivityIndicator
-              size="small"
-              color="#4ECBA0"
-              style={{ marginVertical: 20 }}
-            />
-          )}
+          return (
+            <View key={domain} style={styles.card}>
+              <View style={styles.cardHead}>
+                <Text style={styles.cardTitle}>{aspect}</Text>
 
-          {error && !isLoading && (
-            <Text style={styles.errorText}>{error}</Text>
-          )}
+                {/* How much of the window the advice is actually based on. */}
+                {cardRec && coverageNote(cardRec) && (
+                  <Text style={styles.coverage}>{coverageNote(cardRec)}</Text>
+                )}
+              </View>
 
-          {rec && (
-            <>
-              <Text style={styles.cardLabel}>Observations</Text>
+              {isLoading && !cardRec && (
+                <ActivityIndicator
+                  size="small"
+                  color="#4ECBA0"
+                  style={{ marginVertical: 20 }}
+                />
+              )}
 
-              {rec.explanation.map((line, i) => (
-                <View key={i} style={styles.obsRow}>
-                  <Ionicons name="alert-circle" size={11} color="#E0A33F" />
-                  <Text style={styles.obsText}>{line}</Text>
-                </View>
-              ))}
+              {cardError && !isLoading && (
+                <Text style={styles.errorText}>{cardError}</Text>
+              )}
 
-              <Text style={styles.cardLabel}>Conclusion</Text>
-              <Text style={styles.conclusion}>{rec.recommendation}</Text>
+              {cardRec && (
+                <>
+                  <Text style={styles.cardLabel}>Observations</Text>
 
-              <TouchableOpacity
-                style={styles.explainButton}
-                onPress={() =>
-                  openInsight({
-                    fromApi: true,
-                    domain: 'diet',
-                    aspect: 'Diet & Nutrition',
-                  })
-                }
-              >
-                <Text style={styles.explainText}>
-                  Click here to view full explanation
-                </Text>
-              </TouchableOpacity>
-            </>
-          )}
+                  {(cardRec.explanation ?? []).map((line, i) => (
+                    <View key={i} style={styles.obsRow}>
+                      <Ionicons name="alert-circle" size={11} color="#E0A33F" />
+                      <Text style={styles.obsText}>{line}</Text>
+                    </View>
+                  ))}
 
-          {!rec && !isLoading && !error && (
-            <Text style={styles.conclusion}>
-              Log some meals today and your recommendation will appear here.
-            </Text>
-          )}
-        </View>
+                  <Text style={styles.cardLabel}>Conclusion</Text>
+                  <Text style={styles.conclusion}>{cardRec.recommendation}</Text>
 
-        {/* =====================================================
-            ACTIVITY — same model-backed shape as diet
-        ===================================================== */}
+                  {/* The one thing to actually do, where the model gives one. */}
+                  {cardRec.next_step ? (
+                    <View style={styles.nextStepRow}>
+                      <Ionicons name="arrow-forward-circle" size={12} color="#4ECBA0" />
+                      <Text style={styles.nextStepText}>{cardRec.next_step}</Text>
+                    </View>
+                  ) : null}
 
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Activity</Text>
+                  <TouchableOpacity
+                    style={styles.explainButton}
+                    onPress={() => openInsight({ fromApi: true, domain, aspect })}
+                  >
+                    <Text style={styles.explainText}>
+                      Click here to view full explanation
+                    </Text>
+                  </TouchableOpacity>
+                </>
+              )}
 
-          {isLoading && !fitnessRec && (
-            <ActivityIndicator
-              size="small"
-              color="#4ECBA0"
-              style={{ marginVertical: 20 }}
-            />
-          )}
-
-          {fitnessError && !isLoading && (
-            <Text style={styles.errorText}>{fitnessError}</Text>
-          )}
-
-          {fitnessRec && (
-            <>
-              <Text style={styles.cardLabel}>Observations</Text>
-
-              {(fitnessRec.explanation ?? []).map((line, i) => (
-                <View key={i} style={styles.obsRow}>
-                  <Ionicons name="alert-circle" size={11} color="#E0A33F" />
-                  <Text style={styles.obsText}>{line}</Text>
-                </View>
-              ))}
-
-              <Text style={styles.cardLabel}>Conclusion</Text>
-              <Text style={styles.conclusion}>{fitnessRec.recommendation}</Text>
-
-              <TouchableOpacity
-                style={styles.explainButton}
-                onPress={() =>
-                  openInsight({ fromApi: true, domain: 'fitness', aspect: 'Activity' })
-                }
-              >
-                <Text style={styles.explainText}>
-                  Click here to view full explanation
-                </Text>
-              </TouchableOpacity>
-            </>
-          )}
-
-          {!fitnessRec && !isLoading && !fitnessError && (
-            <Text style={styles.conclusion}>
-              Log some activity and your recommendation will appear here.
-            </Text>
-          )}
-        </View>
+              {!cardRec && !isLoading && !cardError && (
+                <Text style={styles.conclusion}>{emptyHint}</Text>
+              )}
+            </View>
+          );
+        })}
 
         {/* =====================================================
             OTHER INSIGHTS
@@ -493,10 +533,24 @@ export default function Insights() {
                     <Text style={styles.confidence}>
                       Confidence: {Math.round(activeRec.confidence * 100)}%
                     </Text>
+
+                    {/* Which days the advice was built from. */}
+                    {formatWindow(activeRec.window_start, activeRec.window_end) && (
+                      <Text style={styles.windowText}>
+                        {formatWindow(activeRec.window_start, activeRec.window_end)}
+                      </Text>
+                    )}
                   </View>
                 </View>
 
                 <Text style={styles.modalTitle}>{activeRec.recommendation}</Text>
+
+                {/* A low coverage figure is the honest caveat on confidence. */}
+                {coverageNote(activeRec) && (
+                  <Text style={styles.coverageNote}>
+                    Based on {coverageNote(activeRec)}
+                  </Text>
+                )}
 
                 {/* DATA USED */}
                 <Text style={styles.modalLabel}>Data Used</Text>
@@ -562,6 +616,15 @@ export default function Insights() {
                 <Text style={styles.modalLabel}>Recommendation</Text>
                 <View style={styles.rule} />
                 <Text style={styles.modalBody}>{activeRec.recommendation}</Text>
+
+                {/* NEXT STEP */}
+                {activeRec.next_step ? (
+                  <>
+                    <Text style={styles.modalLabel}>Your next step</Text>
+                    <View style={styles.rule} />
+                    <Text style={styles.modalBody}>{activeRec.next_step}</Text>
+                  </>
+                ) : null}
 
                 {/* ALTERNATIVE */}
                 {activeRec.alternative && (
@@ -987,12 +1050,30 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
 
+  cardHead: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+    gap: 10,
+  },
+
   cardTitle: {
     color: '#fff',
     fontSize: 15,
     fontFamily: 'serif',
-    marginBottom: 10,
   },
+
+  coverage: { color: '#60766E', fontSize: 8 },
+
+  nextStepRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 6,
+    marginTop: 10,
+  },
+
+  nextStepText: { color: '#4ECBA0', fontSize: 10, lineHeight: 14, flex: 1 },
 
   cardLabel: {
     color: '#D4E6DF',
@@ -1098,6 +1179,14 @@ const styles = StyleSheet.create({
   confidence: {
     color: '#60766E',
     fontSize: 9,
+  },
+
+  windowText: { color: '#3A5049', fontSize: 8 },
+
+  coverageNote: {
+    color: '#60766E',
+    fontSize: 9,
+    marginTop: 4,
   },
 
   modalTitle: {
