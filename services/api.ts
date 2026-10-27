@@ -218,6 +218,11 @@ export type Alternative = {
   confidence: number;
 };
 
+/**
+ * Covers all three models. Diet returns the core fields; the weekly fitness
+ * and sleep models add the window they cover, how complete the data was, and
+ * a single next step — hence the optional fields.
+ */
 export type RecommendationResponse = {
   /**
    * Identifies this user's specific recommendation. Feedback is keyed on
@@ -231,6 +236,17 @@ export type RecommendationResponse = {
   explanation: string[];
   factors: Factor[];
   alternative: Alternative;
+
+  /** Weekly models only. */
+  data_completeness?: number;
+  next_step?: string;
+  insight?: Record<string, unknown>;
+  window_start?: string;
+  window_end?: string;
+  cached?: boolean;
+
+  /** Sleep only — how many of the seven nights were actually logged. */
+  nights_logged?: number;
 };
 
 export type FeedbackResponse = {
@@ -661,6 +677,19 @@ export const api = {
   getFitnessRecommendationHistory: (token: string, days = 30) =>
     request<RecommendationResponse[]>(
       `/recommendation/fitness/history?days=${days}`,
+      { headers: authHeaders(token) }
+    ),
+
+  /** Weekly sleep recommendation — same response shape again. */
+  getTodaysSleepRecommendation: (token: string, logDate?: string) =>
+    request<RecommendationResponse>(
+      `/recommendation/sleep/today${logDate ? `?log_date=${logDate}` : ''}`,
+      { headers: authHeaders(token) }
+    ),
+
+  getSleepRecommendationHistory: (token: string, days = 30) =>
+    request<RecommendationResponse[]>(
+      `/recommendation/sleep/history?days=${days}`,
       { headers: authHeaders(token) }
     ),
 

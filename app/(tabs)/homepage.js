@@ -3,7 +3,7 @@ import { useFood } from '@/contexts/food-context';
 import { useProfile } from '@/contexts/profile-context';
 import { api, toLogDate } from '@/services/api';
 import { dailyGoals } from '@/src/goals';
-import { initHealth, readDay } from '@/src/health';
+import { initHealth, syncDay } from '@/src/health';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
@@ -19,27 +19,27 @@ import Svg, { Circle } from 'react-native-svg';
 
 const GOALS = { steps: 10000, sleep: 8, activeTime: 90 };
 
-/** Hardcoded: sleep isn't one of the model's ten features. */
-const SLEEP_INSIGHT = {
-  id: 'sleep',
-  title: 'Sleep Insight',
-  lines: [
-    'You slept 6h 20m last night — under the 8h guideline.',
-    '–Try heading to bed 30 minutes earlier tonight',
-    '–Keep screens away for the last hour before sleep',
-  ],
-};
-
-/** Hardcoded: activity isn't a model input either. */
-const ACTIVITY_INSIGHT = {
-  id: 'activity',
-  title: 'Activities Insight',
-  lines: [
-    'Walk another 3000 steps to reach your daily goal!',
-    '–Take a walk in the park',
-    '–Cycle for another 30 mins to lose ~100kcal',
-  ],
-};
+/**
+ * The three aspects, each backed by its own model. The prompt shows while
+ * there isn't enough logged data for that model to say anything.
+ */
+const INSIGHT_CARDS = [
+  {
+    id: 'diet',
+    title: 'Diet Insight',
+    prompt: 'Log your meals today to see your personalised recommendation.',
+  },
+  {
+    id: 'fitness',
+    title: 'Activities Insight',
+    prompt: 'Log some activity this week to see your recommendation.',
+  },
+  {
+    id: 'sleep',
+    title: 'Sleep Insight',
+    prompt: 'Log a few nights to see your sleep recommendation.',
+  },
+];
 
 const pct = (value, goal) => (goal > 0 ? Math.min((value / goal) * 100, 100) : 0);
 
@@ -67,7 +67,8 @@ export default function Homepage() {
   const { profile } = useProfile();
   const { summary, loadSummary } = useFood();
 
-  const [rec, setRec] = useState(null);
+  /** One entry per aspect, keyed by the ids in INSIGHT_CARDS. */
+  const [recs, setRecs] = useState({});
 
   /** Steps from Health Connect; null until the first read completes. */
   const [health, setHealth] = useState(null);
@@ -76,16 +77,28 @@ export default function Homepage() {
     useCallback(() => {
       loadSummary(toLogDate());
 
-      // The diet card mirrors the Insight tab, so a failure here is silent.
+      // These cards mirror the Insight tab, so a failure here is silent —
+      // the card falls back to its prompt rather than showing an error.
       if (token) {
-        api
-          .getTodaysRecommendation(token, toLogDate())
-          .then(setRec)
-          .catch(() => setRec(null));
+        (async () => {
+          const [diet, fitness, sleep] = await Promise.allSettled([
+            api.getTodaysRecommendation(token, toLogDate()),
+            api.getTodaysFitnessRecommendation(token),
+            api.getTodaysSleepRecommendation(token),
+          ]);
+
+          setRecs({
+            diet: diet.status === 'fulfilled' ? diet.value : null,
+            fitness: fitness.status === 'fulfilled' ? fitness.value : null,
+            sleep: sleep.status === 'fulfilled' ? sleep.value : null,
+          });
+        })();
       }
 
       (async () => {
-        if ((await initHealth()) === 'ready') setHealth(await readDay());
+        // Syncs as well as reads, so a day counts even if the user never
+        // opens the Activities screen.
+        if ((await initHealth()) === 'ready') setHealth(await syncDay(token));
       })();
     }, [loadSummary, token])
   );
@@ -114,20 +127,21 @@ export default function Homepage() {
   const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
   const filled = (completion / 100) * CIRCUMFERENCE;
 
-  /** Real recommendation when there is one, otherwise a prompt to log. */
-  const dietInsight = rec
-    ? {
-        id: 'diet',
-        title: 'Diet Insight',
-        lines: [rec.recommendation, ...rec.explanation],
-      }
-    : {
-        id: 'diet',
-        title: 'Diet Insight',
-        lines: ['Log your meals today to see your personalised recommendation.'],
-      };
+  /**
+   * Each card shows its model's recommendation, the first couple of reasons
+   * behind it, and the next step where the model gives one. Falls back to a
+   * prompt when there isn't enough logged data yet.
+   */
+  const insights = INSIGHT_CARDS.map((card) => {
+    const r = recs[card.id];
 
-  const insights = [dietInsight, SLEEP_INSIGHT, ACTIVITY_INSIGHT];
+    if (!r) return { ...card, lines: [card.prompt] };
+
+    const lines = [r.recommendation, ...(r.explanation ?? []).slice(0, 2)];
+    if (r.next_step) lines.push(`– ${r.next_step}`);
+
+    return { ...card, lines };
+  });
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
