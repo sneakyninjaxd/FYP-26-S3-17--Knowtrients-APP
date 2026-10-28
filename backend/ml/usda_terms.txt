@@ -1,50 +1,147 @@
-# Search terms for the USDA importer, one per line.
-# Lines starting with # are ignored.
+# Search terms for the USDA importer, one per line. Lines starting with # are
+# ignored.
 #
-#   python ml/import_usda.py --terms-file ml/usda_terms.txt --limit 3
+#   python ml/import_usda.py --terms-file ml/usda_terms.txt --dry-run
 #
-# Keep terms specific. "chicken" returns dozens of cuts and preparations;
-# "chicken breast roasted" returns the one you want.
+# USDA uses American names, so terms are written that way: "shrimp" not
+# "prawns", "ground beef" not "mince", "whole-wheat" not "wholemeal". The
+# app's search translates the local names users type, so this file only has
+# to match USDA.
+#
+# Every word in a term must appear in the food's name, so keep terms short
+# and specific. A term that finds nothing just prints "no results" — check a
+# dry run and adjust.
 
-# Staples
+# --- Rice, noodles, grains -------------------------------------------------
 rice white cooked
 rice brown cooked
-bread wholemeal
-bread white
+rice glutinous
+rice noodles cooked
 noodles egg cooked
+noodles chinese chow mein
+noodles japanese soba
+spaghetti cooked
+macaroni cooked
 oats rolled
+oatmeal cooked
+quinoa cooked
+couscous cooked
+barley cooked
+bread white
+bread whole-wheat
+bread multigrain
+bagel plain
+english muffin
+pita bread
+tortilla flour
+tortilla corn
+crackers saltines
+cereal corn flakes
 
-# Protein
+# --- Mixed and prepared dishes (Survey / FNDDS) ----------------------------
+fried rice
+chow mein
+lo mein
+chicken curry
+beef curry
+vegetable curry
+pad thai
+spring roll
+egg roll
+dumpling
+pot sticker
+sushi
+rice congee
+chicken soup
+noodle soup
+stir fry chicken
+sweet and sour chicken
+fried chicken
+chicken nuggets
+hamburger
+cheeseburger
+pizza cheese
+sandwich chicken
+omelet
+scrambled eggs
+
+# --- Meat, fish, eggs ------------------------------------------------------
 chicken breast roasted
 chicken thigh roasted
+chicken wing
+duck roasted
 pork loin cooked
-beef mince cooked
+pork belly
+bacon cooked
+ham sliced
+beef ground cooked
+beef steak cooked
+lamb cooked
 egg whole boiled
+egg whole fried
 salmon cooked
 tuna canned
-prawns cooked
+mackerel cooked
+sardines canned
+cod cooked
+tilapia cooked
+shrimp cooked
+squid cooked
+crab cooked
+clams cooked
+
+# --- Plant protein and legumes ---------------------------------------------
 tofu firm
+tofu soft
+tofu fried
 tempeh
-
-# Vegetables
-broccoli cooked
-spinach cooked
-carrots raw
-cabbage cooked
-kale raw
-tomatoes raw
-cucumber raw
-lettuce raw
-mushrooms cooked
-bean sprouts raw
-
-# Legumes
+soy milk
+edamame
 lentils cooked
 chickpeas cooked
 black beans cooked
-edamame cooked
+kidney beans cooked
+mung beans cooked
+peanuts roasted
+almonds raw
+cashews raw
+walnuts
+peanut butter
 
-# Fruit
+# --- Vegetables ------------------------------------------------------------
+broccoli cooked
+spinach cooked
+spinach raw
+cabbage cooked
+cabbage chinese pak-choi
+kale raw
+carrots raw
+carrots cooked
+tomatoes raw
+cucumber raw
+lettuce raw
+eggplant cooked
+okra cooked
+mushrooms cooked
+mushrooms shiitake
+bean sprouts raw
+green beans cooked
+peas green cooked
+corn sweet cooked
+onions raw
+garlic raw
+peppers sweet raw
+scallions raw
+sweet potato cooked
+potatoes baked
+potatoes boiled
+pumpkin cooked
+cauliflower cooked
+zucchini cooked
+bitter melon
+seaweed
+
+# --- Fruit -----------------------------------------------------------------
 banana raw
 apple raw
 orange raw
@@ -52,26 +149,54 @@ papaya raw
 watermelon raw
 mango raw
 grapes raw
+pineapple raw
+pear raw
+guava raw
+dragon fruit
+lychee
+longan
+durian
+jackfruit
+kiwifruit raw
+strawberries raw
+blueberries raw
+avocado raw
+dates
+raisins
 
-# Dairy
+# --- Dairy -----------------------------------------------------------------
 milk whole
 milk skim
+milk low fat
 yogurt plain
+yogurt greek
 cheese cheddar
-
-# Nuts and seeds
-almonds raw
-peanuts roasted
-cashews raw
-
-# Fats and oils
-olive oil
+cheese mozzarella
 butter
+ice cream vanilla
 
-# Drinks and snacks
+# --- Fats, sauces, condiments ----------------------------------------------
+olive oil
+vegetable oil
+coconut milk
+soy sauce
+oyster sauce
+fish sauce
+ketchup
+mayonnaise
+sugar granulated
+honey
+
+# --- Drinks and snacks -----------------------------------------------------
 coffee brewed
 tea brewed
 orange juice
+apple juice
 cola
-potato chips
+sports drink
 chocolate milk
+potato chips
+popcorn
+chocolate milk candy
+cookies chocolate chip
+cake chocolate

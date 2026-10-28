@@ -13,6 +13,12 @@ Usage, from the backend/ directory:
 
     python ml/create_admin.py --list
 
+To create an account on the live database, pass its external URL rather than
+editing .env — it applies to this run only:
+
+    python ml/create_admin.py --email ... --password ... --role platform_administrator \
+        --database-url "postgresql://..."
+
 Roles: account_administrator, platform_administrator
 (the earlier names user_admin and platform_manager are still accepted)
 """
@@ -20,6 +26,13 @@ Roles: account_administrator, platform_administrator
 import argparse
 import os
 import sys
+
+# Must take effect before the database module is imported, because the
+# engine is created at import time.
+if "--database-url" in sys.argv:
+    _i = sys.argv.index("--database-url")
+    if _i + 1 < len(sys.argv):
+        os.environ["DATABASE_URL"] = sys.argv[_i + 1]
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -102,6 +115,10 @@ def main() -> None:
     parser.add_argument("--first", default="Admin")
     parser.add_argument("--last", default="User")
     parser.add_argument("--role", default=models.ROLE_ACCOUNT_ADMIN)
+    parser.add_argument(
+        "--database-url",
+        help="Create the account in this database (e.g. the live one) instead of the one in .env",
+    )
     args = parser.parse_args()
 
     if args.list:

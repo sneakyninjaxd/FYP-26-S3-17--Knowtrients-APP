@@ -79,28 +79,45 @@ user logging a meal does not depend on a third-party service being available.
 python ml/seed_foods.py
 ```
 
-**USDA FoodData Central.** Get a free key at
+**USDA FoodData Central** — the real data. Get a free key at
 <https://fdc.nal.usda.gov/api-key-signup/>, add `USDA_API_KEY=...` to `.env`,
 then:
 
 ```bash
 python ml/import_usda.py --terms-file ml/usda_terms.txt --dry-run
-python ml/import_usda.py --terms-file ml/usda_terms.txt --limit 3
+python ml/import_usda.py --terms-file ml/usda_terms.txt
+python ml/remove_placeholders.py
 ```
 
-Run the dry run first — it prints what would be imported without writing
-anything, which is the cheapest way to catch a nutrient that is coming back
-as zero.
+Three datasets are imported: Foundation and SR Legacy for individual foods,
+and Survey (FNDDS) for prepared dishes like fried rice and curries. Branded
+is left out so commercial products don't swamp ordinary searches.
 
-Only Foundation and SR Legacy foods are imported; the Branded dataset would
-swamp search results with commercial products. Entries are marked
-`source="USDA FoodData Central"` with the FDC id in `source_ref`, so every
-value remains traceable (constraint C-06). Re-running is safe — entries
-already present are skipped.
+Search results don't carry serving sizes, so the importer fetches full
+details in batches of 20 and stores each food's first real portion. Foods
+without one default to 100 g when logged.
 
-Edit `ml/usda_terms.txt` to change what gets imported. Specific terms work
-better than general ones: "chicken breast roasted" beats "chicken".
+`ml/usda_terms.txt` uses American names — "shrimp", "ground beef",
+"whole-wheat" — because that's what USDA's search matches.
 
+**Loading the live database.** Pass the external URL instead of editing
+`.env`; it applies to that run only:
+
+```bash
+python ml/import_usda.py --terms-file ml/usda_terms.txt --database-url "postgresql://..."
+python ml/remove_placeholders.py --database-url "postgresql://..."
+```
+
+`create_admin.py` takes the same option. `remove_placeholders.py` refuses to
+run until real data exists, so food search is never left empty.
+
+### Food search
+
+Every word of the query must appear in the name, in any order, so "chicken
+breast" finds "Chicken, broilers or fryers, breast, roasted". Plurals and
+common local names are handled — "prawns" finds shrimp, "brinjal" eggplant,
+"bee hoon" rice noodles. The plain food ranks first: "banana" gives "Bananas,
+raw" before "Banana bread". Synonyms are in `app/food_search.py`.
 
 ## Fitness recommendation model
 

@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from .. import models, schemas
+from .. import food_search, models, schemas
 from ..database import get_db
 from ..deps import get_current_user
 
@@ -49,14 +49,19 @@ def search_foods(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    """Backs the food search screen."""
-    pattern = f"%{q.strip()}%"
+    """
+    Backs the food search screen.
+
+    Every word of the query must appear in the name, in any order, with
+    plurals and common local names handled — see app/food_search.py.
+    """
+    condition = food_search.build_filter(q)
+    if condition is None:
+        return []
     return (
         db.query(models.Food)
-        .filter(models.Food.name.ilike(pattern))
-        # Verified entries from the nutrition source rank above user-submitted
-        # ones, per constraint C-06.
-        .order_by(models.Food.is_verified.desc(), models.Food.name)
+        .filter(condition)
+        .order_by(*food_search.ranking(q))
         .limit(limit)
         .all()
     )
