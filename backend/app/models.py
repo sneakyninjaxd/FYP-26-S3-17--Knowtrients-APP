@@ -45,24 +45,55 @@ def utcnow() -> datetime:
 # ---------------------------------------------------------------------------
 
 ROLE_USER = "user"
-ROLE_USER_ADMIN = "user_admin"
-ROLE_PLATFORM_MANAGER = "platform_manager"
+ROLE_ACCOUNT_ADMIN = "account_administrator"
+ROLE_PLATFORM_ADMIN = "platform_administrator"
 
-ROLES = (ROLE_USER, ROLE_USER_ADMIN, ROLE_PLATFORM_MANAGER)
+# The roles were renamed from User Admin and Platform Manager. The old
+# constant names stay as aliases so nothing that imports them breaks; the
+# stored values are the new slugs.
+ROLE_USER_ADMIN = ROLE_ACCOUNT_ADMIN
+ROLE_PLATFORM_MANAGER = ROLE_PLATFORM_ADMIN
+
+ROLES = (ROLE_USER, ROLE_ACCOUNT_ADMIN, ROLE_PLATFORM_ADMIN)
+
+# Every earlier name each role has had. Accepted on input and converted, and
+# used at start-up to rename roles already stored in the database.
+LEGACY_ROLES = {
+    "user_admin": ROLE_ACCOUNT_ADMIN,
+    "account_manager": ROLE_ACCOUNT_ADMIN,
+    "platform_manager": ROLE_PLATFORM_ADMIN,
+    "IT_manager": ROLE_PLATFORM_ADMIN,
+    "it_manager": ROLE_PLATFORM_ADMIN,
+}
+
+
+def normalize_role(role: str | None) -> str | None:
+    """Converts any earlier role name to the current one."""
+    if role is None:
+        return None
+    return LEGACY_ROLES.get(role, role)
+
 
 # Labels used by the admin website's User Type column and filters.
 ROLE_LABELS = {
     ROLE_USER: "User",
-    ROLE_USER_ADMIN: "User Admin",
-    ROLE_PLATFORM_MANAGER: "Platform Manager",
+    ROLE_ACCOUNT_ADMIN: "Account Administrator",
+    ROLE_PLATFORM_ADMIN: "Platform Administrator",
+}
+
+# Earlier labels, so a filter sent by an older page still matches.
+LEGACY_ROLE_LABELS = {
+    "User Admin": ROLE_ACCOUNT_ADMIN,
+    "Platform Manager": ROLE_PLATFORM_ADMIN,
+    "IT Manager": ROLE_PLATFORM_ADMIN,
 }
 
 # Display-id prefix per role, so an id communicates the account kind at a
 # glance in the admin tables.
 ROLE_ID_PREFIX = {
     ROLE_USER: "U",
-    ROLE_USER_ADMIN: "A",
-    ROLE_PLATFORM_MANAGER: "M",
+    ROLE_ACCOUNT_ADMIN: "A",
+    ROLE_PLATFORM_ADMIN: "P",
 }
 
 
@@ -84,8 +115,9 @@ class User(Base):
     # Administrative state (supports the suspend/reactivate admin functions).
     is_active = Column(Boolean, nullable=False, default=True)
 
-    # Role rather than a boolean: the admin website distinguishes User Admins
-    # from Platform Managers, and they have different permissions. See ROLES.
+    # Role rather than a boolean: the admin website distinguishes Account
+    # Administrators from Platform Administrators, and they have different
+    # permissions. See ROLES.
     role = Column(String, nullable=False, default="user", index=True)
 
     # Human-readable identifier shown in the admin tables (U001, U020).
@@ -116,7 +148,7 @@ class User(Base):
     @property
     def is_admin(self) -> bool:
         """Any staff role. Kept so existing checks read naturally."""
-        return self.role in (ROLE_USER_ADMIN, ROLE_PLATFORM_MANAGER)
+        return self.role in (ROLE_ACCOUNT_ADMIN, ROLE_PLATFORM_ADMIN)
 
     @property
     def full_name(self) -> str:
@@ -785,3 +817,31 @@ class SleepRecommendationHistory(Base):
     __table_args__ = (
         Index("ix_sleep_reco_user_date", "user_id", "log_date"),
     )
+
+
+# ---------------------------------------------------------------------------
+# Request metrics
+# ---------------------------------------------------------------------------
+
+
+class RequestStat(Base):
+    """
+    Per-day request counters, for the Platform Administrator's performance
+    figures: how many requests, how many failed with a server error, and the
+    total time spent, from which the average response time follows.
+
+    Counted in memory by middleware and added in here in batches, rather than
+    written on every request — a database write per request would add to the
+    response times being measured.
+
+    One row per day. Several workers can add to the same day safely, because
+    every flush adds its counts rather than overwriting.
+    """
+
+    __tablename__ = "request_stats"
+
+    id = Column(Integer, primary_key=True, index=True)
+    day = Column(Date, nullable=False, unique=True, index=True)
+    request_count = Column(Integer, nullable=False, default=0)
+    error_count = Column(Integer, nullable=False, default=0)   # 5xx responses
+    total_ms = Column(Float, nullable=False, default=0.0)

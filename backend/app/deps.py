@@ -36,37 +36,44 @@ def get_current_user(
 def get_current_admin(
     current_user: models.User = Depends(get_current_user),
 ) -> models.User:
-    """Restricts a route to staff accounts (User Admin or Platform Manager)."""
+    """Restricts a route to staff accounts (either administrator type)."""
     if not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Administrator access required")
     return current_user
 
 
-def get_current_user_admin(
+def get_current_account_admin(
     current_user: models.User = Depends(get_current_user),
 ) -> models.User:
     """
-    Restricts a route to User Admins.
+    Restricts a route to Account Administrators.
 
     The division of responsibility is by subject matter, not seniority:
-    User Admins own everything to do with accounts, so account-level authority
-    — changing roles, deleting accounts, acting on other staff accounts — sits
-    here rather than with Platform Managers.
+    Account Administrators own everything to do with accounts, so
+    account-level authority — creating staff, changing roles, deleting
+    accounts, acting on other staff accounts — sits here rather than with
+    Platform Administrators.
     """
-    if current_user.role != models.ROLE_USER_ADMIN:
-        raise HTTPException(status_code=403, detail="User Admin access required")
+    if current_user.role != models.ROLE_ACCOUNT_ADMIN:
+        raise HTTPException(status_code=403, detail="Account Administrator access required")
     return current_user
 
 
-def get_current_platform_manager(
+def get_current_platform_admin(
     current_user: models.User = Depends(get_current_user),
 ) -> models.User:
     """
-    Restricts a route to Platform Managers.
+    Restricts a route to Platform Administrators.
 
-    Platform Managers own system performance rather than accounts: the
-    nutrition catalogue, fairness auditing, and platform-level metrics.
+    Platform Administrators own system performance rather than accounts: the
+    nutrition catalogue, model accuracy and fairness, platform metrics, and
+    bug reports and feedback about the app.
     """
-    if current_user.role != models.ROLE_PLATFORM_MANAGER:
-        raise HTTPException(status_code=403, detail="Platform Manager access required")
+    if current_user.role != models.ROLE_PLATFORM_ADMIN:
+        raise HTTPException(status_code=403, detail="Platform Administrator access required")
     return current_user
+
+
+# Earlier names, kept so existing imports keep working.
+get_current_user_admin = get_current_account_admin
+get_current_platform_manager = get_current_platform_admin

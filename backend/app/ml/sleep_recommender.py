@@ -156,18 +156,20 @@ def _phrase(feature: str, value: float, imputed: bool, predicted: int) -> str:
     label = FEATURE_LABELS[feature]
 
     if imputed:
+        # Gaps are filled with a neutral value, so say plainly that the
+        # feature didn't count either way — not that a value was guessed.
         if feature == "satisfaction_rate":
             return (
                 "You haven't rated how satisfied you were with your sleep this "
-                "week, so a typical value was assumed. Rating your nights makes "
-                "this more accurate."
+                "week, so that wasn't counted for or against you. Rating your "
+                "nights makes this more accurate."
             )
-        if feature in ("bedtime_variability", "wake_variability", "avg_bedtime"):
+        if feature in ("bedtime_variability", "wake_variability", "duration_variability"):
             return (
-                f"Not enough nights had bed and wake times to measure your "
-                f"{label}, so a typical value was assumed."
+                f"There aren't enough nights logged yet to measure your {label}, "
+                f"so it wasn't counted for or against you."
             )
-        return f"Not enough data for your {label}, so a typical value was assumed."
+        return f"There isn't enough data for your {label} yet, so it wasn't counted."
 
     if feature == "satisfaction_rate":
         share = f"You rated {_fmt(feature, value)} of this week's nights as satisfying"
@@ -405,7 +407,9 @@ def recommend(
         x for x in factors
         if x["contribution"] > 0.01 and x["feature"] not in NON_ACTIONABLE
     ]
-    drivers = [x for x in supporting if _is_direct_driver(x["feature"], x["value"], predicted)]
+    # An assumed value is never presented as a reason for the advice.
+    drivers = [x for x in supporting
+               if not x["imputed"] and _is_direct_driver(x["feature"], x["value"], predicted)]
     others = [x for x in supporting if x not in drivers]
 
     if predicted == 0:

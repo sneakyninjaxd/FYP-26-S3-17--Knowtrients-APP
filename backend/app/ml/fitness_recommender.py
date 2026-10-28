@@ -168,10 +168,19 @@ def _phrase(feature: str, value: float, imputed: bool, predicted: int) -> str:
     label = FEATURE_LABELS[feature]
 
     if imputed:
-        return (
-            f"No {label} were synced from your device, so a typical value was "
-            f"assumed. Connecting Health Connect would make this more accurate."
-        )
+        # Each kind of missing data has a different fix, so say which.
+        if feature == "avg_daily_steps":
+            return (
+                "No steps were synced from your device, so a typical step count "
+                "was assumed. Connecting Health Connect would make this more "
+                "accurate."
+            )
+        if feature in ("avg_sleep_hours", "sleep_variability"):
+            return (
+                "You haven't logged enough sleep this week, so sleep wasn't "
+                "counted for or against you. Logging it makes this more accurate."
+            )
+        return f"There isn't enough data for your {label} yet, so it wasn't counted."
 
     value_text = _fmt(feature, value)
     comparison = _compare(feature, value)
@@ -420,9 +429,10 @@ def recommend(
     # Direct drivers first, then at most one factor that helped by
     # elimination — enough to show what was ruled out without crowding out
     # the actual reasons.
+    # An assumed value is never presented as a reason for the advice.
     drivers = [
         f for f in supporting
-        if _is_direct_driver(f["feature"], f["value"], predicted)
+        if not f["imputed"] and _is_direct_driver(f["feature"], f["value"], predicted)
     ]
     others = [f for f in supporting if f not in drivers]
     if predicted == 0:

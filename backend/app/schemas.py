@@ -48,6 +48,9 @@ class UserResponse(BaseModel):
     # The admin website checks this to reject ordinary app users at login.
     role: str = "user"
     display_id: str | None = None
+    # Shown on the website's My Account pages.
+    user_type: str = "User"
+    created_at: datetime | None = None
 
     class Config:
         from_attributes = True
@@ -313,7 +316,8 @@ class AdminAccountRow(BaseModel):
     first_name: str
     last_name: str
     email: EmailStr
-    user_type: str          # "User" | "User Admin" | "Platform Manager"
+    role: str = "user"      # slug, for the website's change-role control
+    user_type: str          # "User" | "Account Administrator" | "Platform Administrator"
     status: str             # "Active" | "Suspended"
     created_at: datetime | None = None
 
@@ -350,8 +354,9 @@ class RoleUpdate(BaseModel):
     @field_validator("role")
     @classmethod
     def known_role(cls, v):
-        from .models import ROLES
+        from .models import ROLES, normalize_role
 
+        v = normalize_role(v)
         if v not in ROLES:
             raise ValueError(f"role must be one of: {', '.join(ROLES)}")
         return v
@@ -363,8 +368,14 @@ class AdminDashboard(BaseModel):
     total_users: int = 0
     active_users: int = 0
     suspended_users: int = 0
+    account_administrators: int = 0
+    platform_administrators: int = 0
+    # Earlier names for the two counts above, kept for older pages.
     user_admins: int = 0
     platform_managers: int = 0
+    # Bug reports belong to Platform Administrators; reported here so the
+    # dashboard can show them without counting them as account requests.
+    open_bug_reports: int = 0
     new_users_7d: int = 0
     unresolved_requests: int = 0
     resolved_requests: int = 0
@@ -752,3 +763,94 @@ class SleepRecommendationResponse(FitnessRecommendationResponse):
     """Same shape as the fitness response, plus how many nights were logged."""
 
     nights_logged: int = 0
+
+
+
+# ---------------------------------------------------------------------------
+# Account administration — staff creation and own-account changes
+# ---------------------------------------------------------------------------
+
+
+class StaffAccountCreate(BaseModel):
+    """An Account Administrator creating another administrator."""
+
+    first_name: str = Field(min_length=1, max_length=100)
+    last_name: str = Field(min_length=1, max_length=100)
+    email: EmailStr
+    password: str = Field(min_length=8, max_length=200)
+    role: str
+
+    @field_validator("first_name", "last_name")
+    @classmethod
+    def not_blank(cls, v):
+        if not v.strip():
+            raise ValueError("First and last name are required.")
+        return v.strip()
+
+    @field_validator("role")
+    @classmethod
+    def staff_role(cls, v):
+        from .models import ROLE_ACCOUNT_ADMIN, ROLE_PLATFORM_ADMIN, normalize_role
+
+        v = normalize_role(v)
+        if v not in (ROLE_ACCOUNT_ADMIN, ROLE_PLATFORM_ADMIN):
+            raise ValueError(
+                "Role must be Account Administrator or Platform Administrator."
+            )
+        return v
+
+
+class RegisterRequest(BaseModel):
+    """
+    Public sign-up from the website's register page.
+
+    Unlike /signup, which the app uses, there is no retype field — the page
+    checks the two password boxes match before sending.
+    """
+
+    first_name: str = Field(min_length=1, max_length=100)
+    last_name: str = Field(min_length=1, max_length=100)
+    email: EmailStr
+    password: str
+
+    @field_validator("first_name", "last_name")
+    @classmethod
+    def not_blank(cls, v):
+        if not v.strip():
+            raise ValueError("First and last name are required.")
+        return v.strip()
+
+    @field_validator("password")
+    @classmethod
+    def password_strength(cls, v):
+        if len(v) < 8:
+            raise ValueError("Password must be at least 8 characters long")
+        return v
+
+
+class UpdateMe(BaseModel):
+    """Own name. Email, id and role are not editable here."""
+
+    first_name: str = Field(min_length=1, max_length=100)
+    last_name: str = Field(min_length=1, max_length=100)
+
+    @field_validator("first_name", "last_name")
+    @classmethod
+    def not_blank(cls, v):
+        if not v.strip():
+            raise ValueError("First and last name are required.")
+        return v.strip()
+
+
+class ChangePassword(BaseModel):
+    current_password: str = Field(min_length=1)
+    new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def new_password_rules(cls, v, info):
+        if len(v) < 8:
+            raise ValueError("New password must be at least 8 characters.")
+        if info.data.get("current_password") == v:
+            raise ValueError("New password must be different from your current password.")
+        return v

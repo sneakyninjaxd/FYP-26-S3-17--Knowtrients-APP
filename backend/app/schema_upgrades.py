@@ -136,3 +136,29 @@ def backfill_support_type(engine: Engine) -> int:
         updated += result.rowcount or 0
 
     return updated
+
+
+def migrate_role_names(engine: Engine) -> int:
+    """
+    Renames roles stored under an earlier name to the current one —
+    user_admin to account_administrator, platform_manager to
+    platform_administrator.
+
+    Only rows still holding an old name are touched, so it does nothing after
+    the first run. Returns how many accounts were renamed.
+    """
+    from . import models
+
+    inspector = inspect(engine)
+    if "users" not in inspector.get_table_names():
+        return 0
+
+    renamed = 0
+    with engine.begin() as conn:
+        for old, new in models.LEGACY_ROLES.items():
+            result = conn.execute(
+                text("UPDATE users SET role = :new WHERE role = :old"),
+                {"new": new, "old": old},
+            )
+            renamed += result.rowcount or 0
+    return renamed

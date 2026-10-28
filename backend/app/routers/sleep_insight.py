@@ -20,6 +20,7 @@ from ..ml import sleep_recommender
 from ..ml.fitness_features import DEFAULT_INTENSITY, INTENSITY_MAP, MVPA_WEIGHT
 from ..ml.sleep_features import (
     FEATURE_NAMES,
+    NEUTRAL_WHEN_MISSING,
     SHORT_NIGHT_HOURS,
     bedtime_to_minutes,
     wake_to_minutes,
@@ -42,9 +43,11 @@ def build_sleep_features(db: Session, user: models.User, end: date_type) -> dict
     - A night with no entry is missing, not zero sleep. Averages use logged
       nights only, and completeness reports how many there were.
     - Spread (duration, bedtime, wake time) needs at least two nights. With
-      fewer, the typical value is used and flagged as imputed.
+      fewer, a neutral value inside the guideline is used and flagged as
+      imputed — never the typical value, which is itself over the threshold
+      and would produce advice the user's data doesn't support.
     - Satisfaction comes from the user's sleep ratings. With none this week,
-      the typical value is used and flagged — the explanation then says the
+      a neutral value is used and flagged — the explanation then says the
       user hasn't rated their sleep, rather than inventing a judgement.
     - Activity counts days with nothing logged as zero, as in the fitness
       model: rest days are real.
@@ -97,7 +100,7 @@ def build_sleep_features(db: Session, user: models.User, end: date_type) -> dict
         if len(values) >= MIN_NIGHTS_FOR_SPREAD:
             return round(statistics.pstdev(values), 2)
         imputed.add(name)
-        return float(medians[name])
+        return NEUTRAL_WHEN_MISSING[name]
 
     features = {
         "avg_sleep_hours": round(sum(hours) / len(hours), 2) if hours else float(medians["avg_sleep_hours"]),
@@ -121,7 +124,7 @@ def build_sleep_features(db: Session, user: models.User, end: date_type) -> dict
         yes = sum(1 for (satisfied,) in ratings if satisfied)
         features["satisfaction_rate"] = round(yes / len(ratings), 3)
     else:
-        features["satisfaction_rate"] = float(medians["satisfaction_rate"])
+        features["satisfaction_rate"] = NEUTRAL_WHEN_MISSING["satisfaction_rate"]
         imputed.add("satisfaction_rate")
 
     nights_logged = len({s.log_date for s in sleeps})

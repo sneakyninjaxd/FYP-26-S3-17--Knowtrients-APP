@@ -11,6 +11,7 @@ from .routers import (
     admin,
     auth_routes,
     fitness,
+    im,
     logs,
     platform,
     profile,
@@ -32,12 +33,16 @@ from .schema_upgrades import (  # noqa: E402
     backfill_support_type,
     ensure_columns,
     ensure_indexes,
+    migrate_role_names,
 )
 
 _added = ensure_columns(engine)
 if _added:
     print(f"Schema upgrade: added {', '.join(_added)}")
 ensure_indexes(engine)
+_renamed = migrate_role_names(engine)
+if _renamed:
+    print(f"Schema upgrade: renamed the role on {_renamed} staff account(s)")
 _filled = backfill_support_type(engine)
 if _filled:
     print(f"Schema upgrade: set support_type on {_filled} existing request(s)")
@@ -86,10 +91,27 @@ async def lifespan(app: FastAPI):
     except Exception as exc:  # noqa: BLE001
         print(f"Sleep model failed to load: {exc}")
 
+    # Request counters are kept in memory and saved every minute.
+    import asyncio
+
+    from . import metrics
+
+    flusher = asyncio.create_task(metrics.flush_periodically())
+
     yield
+
+    # Save whatever has accumulated since the last flush before stopping.
+    flusher.cancel()
+    metrics.flush()
 
 
 app = FastAPI(title="Knowtrients API", version="1.0.0", lifespan=lifespan)
+
+# Times every request and counts server errors, for the Platform
+# Administrator's performance figures. See app/metrics.py.
+from . import metrics as _metrics  # noqa: E402
+
+app.middleware("http")(_metrics.middleware)
 
 # Expo Go sends no browser origin from a native build, and the dev URL varies
 # per machine. Left open for the project; tighten before any production use.
@@ -115,6 +137,7 @@ app.include_router(support.admin_router)
 app.include_router(platform.router)
 app.include_router(subscription.router)
 app.include_router(satisfaction.router)
+app.include_router(im.router)
 
 
 @app.get("/health", tags=["meta"])

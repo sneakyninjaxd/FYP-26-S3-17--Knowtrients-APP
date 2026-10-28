@@ -138,4 +138,14 @@ CLASS_DRIVERS = {
     },
 }
 
+# Values used when the user has no data for a feature. Inside the
+# guidelines, not the typical value: typical sleep in the training data is
+# 6.9 hours, below the 7-hour minimum, so a user who logs workouts but no
+# sleep would otherwise be told to improve their sleep. Missing data must
+# never be the reason for a recommendation.
+NEUTRAL_WHEN_MISSING = {
+    "avg_sleep_hours": 7.5,
+    "sleep_variability": 0.8,
+}
+
 MODEL_VERSION = "fitness-1.0"

@@ -377,7 +377,59 @@ About 94.5% against the guideline-based labels on held-out synthetic data,
 with recall of 0.76 or better on every recommendation. As with the other
 models, this shows the pipeline works, not real-world effectiveness.
 
-## Roles
+
+## Roles (renamed)
+
+| Slug | Label | Owns |
+|---|---|---|
+| `account_administrator` | Account Administrator | Everything under `/admin`: accounts, staff creation, account support requests |
+| `platform_administrator` | Platform Administrator | `/im` and `/platform`: analytics, model quality, bug reports, the nutrition catalogue |
+
+These replaced `user_admin` and `platform_manager`. Existing accounts are
+renamed automatically at start-up, and the old names are still accepted
+anywhere a role is sent — `create_admin.py`, role changes and filters.
+
+## Website endpoints
+
+| Method | Path | Purpose |
+|---|---|---|
+| POST | `/register` | Public sign-up. Always creates an app user — the role is never read from the request |
+| POST | `/admin/accounts` | Account Administrator creates a staff account |
+| PATCH | `/me` | Change own name |
+| POST | `/me/password` | Change own password; needs the current one |
+| GET | `/im/analytics` | Figures and chart data for the PA pages |
+| GET | `/im/feedback` | Bug report queue |
+| GET | `/im/feedback/{id}` | One bug report |
+| POST | `/im/feedback/{id}/reply` | Reply, optionally resolving |
+| PATCH | `/im/feedback/{id}/status` | Resolve or reopen |
+
+The `/im/` prefix dates from when this role was called IT manager.
+
+**"AI accuracy" means user-rated helpfulness.** There's no ground truth for
+whether a recommendation was correct, so each chart point is the share of
+that day's rated recommendations marked helpful. Days without ratings are
+`null`, not zero.
+
+**Request metrics.** Middleware times every request and counts 5xx errors,
+saving daily totals to `request_stats` once a minute rather than writing on
+every request. It reports a request success rate rather than uptime, since a
+server can't record its own downtime.
+
+**SQLite now enforces foreign keys**, so deleting an account removes its data
+locally the same way it does on PostgreSQL.
+
+## Missing data never drives a recommendation
+
+When there isn't enough data to measure a feature — sleep regularity from a
+single night, sleep in the fitness model when none was logged — the gap is
+filled with a value safely inside the guideline, not the typical value from
+training. The typical values sat on the wrong side of their thresholds
+(bedtime spread 67 minutes against a 60-minute limit; sleep 6.9 hours against
+7), so filling gaps with them made both models recommend fixing problems the
+user's data didn't show. Assumed values are also never presented as the
+reason for advice.
+
+## Roles (earlier notes)
 
 Responsibility is divided by subject matter, not seniority. Neither role
 outranks the other.

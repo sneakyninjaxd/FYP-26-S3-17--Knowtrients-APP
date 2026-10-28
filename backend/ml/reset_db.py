@@ -57,7 +57,7 @@ def main() -> None:
     tables = ", ".join(sorted(models.Base.metadata.tables))
     print(f"\nDone. Tables now present: {tables}")
     print("\nNext: python ml/seed_foods.py")
-    print("      python ml/create_admin.py --email ... --password ... --role platform_manager")
+    print("      python ml/create_admin.py --email ... --password ... --role platform_administrator")
 
 
 if __name__ == "__main__":

@@ -19,6 +19,7 @@ from ..database import get_db
 from ..deps import get_current_user
 from ..ml import fitness_recommender
 from ..ml.fitness_features import (
+    NEUTRAL_WHEN_MISSING,
     DEFAULT_INTENSITY,
     FEATURE_NAMES,
     INTENSITY_MAP,
@@ -144,13 +145,13 @@ def build_fitness_features(db: Session, user: models.User, end: date_type) -> di
     if hours:
         features["avg_sleep_hours"] = round(sum(hours) / len(hours), 2)
     else:
-        features["avg_sleep_hours"] = float(medians["avg_sleep_hours"])
+        features["avg_sleep_hours"] = NEUTRAL_WHEN_MISSING["avg_sleep_hours"]
         imputed.add("avg_sleep_hours")
 
     if len(hours) >= MIN_NIGHTS_FOR_VARIABILITY:
         features["sleep_variability"] = round(statistics.pstdev(hours), 2)
     else:
-        features["sleep_variability"] = float(medians["sleep_variability"])
+        features["sleep_variability"] = NEUTRAL_WHEN_MISSING["sleep_variability"]
         imputed.add("sleep_variability")
 
     # Completeness: of the fourteen day-slots in the week (seven for

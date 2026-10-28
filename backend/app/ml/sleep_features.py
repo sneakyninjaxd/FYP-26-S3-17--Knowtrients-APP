@@ -100,6 +100,21 @@ CLASS_DRIVERS = {
 # never presented as a reason in the explanation.
 NON_ACTIONABLE = {"age"}
 
+# Values used when there isn't enough data to measure a feature.
+#
+# These are deliberately inside the guidelines rather than the typical
+# value from training data. The typical bedtime spread is 67 minutes — over
+# the 60-minute threshold — so filling a gap with it would make the model
+# recommend a regular schedule to someone who has logged a single night.
+# Missing data must never be the reason for a recommendation: a neutral
+# value means the model only flags what the user's own data shows.
+NEUTRAL_WHEN_MISSING = {
+    "bedtime_variability": 30.0,
+    "wake_variability": 30.0,
+    "duration_variability": 0.6,
+    "satisfaction_rate": 0.75,
+}
+
 MODEL_VERSION = "sleep-1.0"
 
 

@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..database import get_db
-from ..deps import get_current_admin, get_current_user
+from ..deps import get_current_account_admin, get_current_user
 
 user_router = APIRouter(prefix="/support", tags=["support"])
 admin_router = APIRouter(prefix="/admin", tags=["admin"])
@@ -396,7 +396,7 @@ def list_requests(
     q: str | None = None,
     limit: int = Query(default=100, ge=1, le=500),
     db: Session = Depends(get_db),
-    _: models.User = Depends(get_current_admin),
+    _: models.User = Depends(get_current_account_admin),
 ):
     """The request queue, with status, type and search filters."""
     # The join must be explicit: support_requests has two foreign keys to
@@ -452,7 +452,7 @@ def _any_request(db: Session, request_id: int) -> models.SupportRequest:
 def get_request(
     request_id: int,
     db: Session = Depends(get_db),
-    _: models.User = Depends(get_current_admin),
+    _: models.User = Depends(get_current_account_admin),
 ):
     request = _any_request(db, request_id)
     counts = _message_counts(db, [request.id], "staff").get(request.id, (0, 0))
@@ -463,7 +463,7 @@ def get_request(
 def staff_thread(
     request_id: int,
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(get_current_admin),
+    current_admin: models.User = Depends(get_current_account_admin),
 ):
     """A request's conversation. Opening it marks the user's messages read."""
     request = _any_request(db, request_id)
@@ -479,7 +479,7 @@ def staff_message(
     request_id: int,
     payload: schemas.SupportMessageCreate,
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(get_current_admin),
+    current_admin: models.User = Depends(get_current_account_admin),
 ):
     """
     Sends a message on a request without resolving it — for asking the user
@@ -515,7 +515,7 @@ def reply_to_request(
     request_id: int,
     payload: schemas.SupportRequestReply,
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(get_current_admin),
+    current_admin: models.User = Depends(get_current_account_admin),
 ):
     """
     Respond to a request, optionally marking it resolved.
@@ -547,7 +547,7 @@ def set_request_status(
     request_id: int,
     new_status: str = Query(alias="status"),
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(get_current_admin),
+    current_admin: models.User = Depends(get_current_account_admin),
 ):
     """Resolve or reopen a request without replying."""
     if new_status not in models.REQUEST_STATUSES:
