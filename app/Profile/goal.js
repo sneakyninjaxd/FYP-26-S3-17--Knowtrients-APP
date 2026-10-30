@@ -25,9 +25,21 @@ export default function ProfileGoal() {
   const [saving, setSaving] = useState(false);
 
   const toggleGoal = (id) => {
-    setGoals((prev) =>
-      prev.includes(id) ? prev.filter((g) => g !== id) : [...prev, id]
-    );
+    setGoals((prev) => {
+      if (prev.includes(id)) return prev.filter((g) => g !== id);
+
+      /**
+       * Losing and gaining weight are contradictory, and target_weight_kg
+       * can only mean one direction — so picking one clears the other
+       * rather than letting both sit selected.
+       */
+      const opposite =
+        id === 'lose_weight' ? 'gain_weight'
+          : id === 'gain_weight' ? 'lose_weight'
+            : null;
+
+      return [...prev.filter((g) => g !== opposite), id];
+    });
   };
 
   const handleContinue = async () => {
@@ -38,6 +50,8 @@ export default function ProfileGoal() {
     });
     setSaving(false);
 
+    // Ids must match GOALS in src/profile-options.js exactly — a mismatch
+    // here fails silently by falling through to the lifestyle step.
     if (goals.includes('gain_weight')) {
       router.push('/Profile/gain-weight');
     } else if (goals.includes('lose_weight')) {

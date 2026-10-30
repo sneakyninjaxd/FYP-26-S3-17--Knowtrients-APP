@@ -1,7 +1,6 @@
 import { useAuth } from '@/contexts/auth-context';
 import { useSubscription } from '@/contexts/subscription-context';
 import { api, toLogDate } from '@/services/api';
-import { INSIGHTS } from '@/src/insights';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
@@ -18,14 +17,12 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 /**
- * All three aspects are model-backed now, so the hardcoded content only
- * shows for an aspect whose endpoint is unreachable.
+ * The three model-backed aspects, in the order they appear.
+ *
+ * There is no hardcoded fallback content any more — every card here comes
+ * from a model, and an aspect with nothing to say shows its prompt rather
+ * than invented advice.
  */
-const PLACEHOLDER_INSIGHTS = INSIGHTS.filter(
-  (i) => !/diet|nutrition|food|activity|fitness|exercise|sleep/i.test(i.aspect)
-);
-
-/** The three model-backed aspects, in the order they appear. */
 const MODEL_CARDS = [
   {
     domain: 'diet',
@@ -310,12 +307,6 @@ export default function Insights() {
     setReasonTarget(null);
   };
 
-  /** Placeholder cards keep their own reasoning fields. */
-  const reasoning =
-    selected && !selected.fromApi
-      ? (mode === 'technical' ? selected.reasoningTechnical : selected.reasoningSimple) ?? []
-      : [];
-
   /** Whichever model-backed card the modal is currently showing. */
   const activeRec = selected?.fromApi ? recFor(selected.domain) : null;
 
@@ -455,45 +446,6 @@ export default function Insights() {
             </View>
           );
         })}
-
-        {/* =====================================================
-            OTHER INSIGHTS
-        ===================================================== */}
-
-        {PLACEHOLDER_INSIGHTS.map((insight) => (
-          <View key={insight.id} style={styles.card}>
-            <Text style={styles.cardTitle}>{insight.aspect}</Text>
-
-            <Text style={styles.cardLabel}>Observations</Text>
-
-            {insight.observations.map((obs, i) => (
-              <View key={i} style={styles.obsRow}>
-                <Ionicons
-                  name={obs.icon === 'alert' ? 'alert-circle' : 'warning'}
-                  size={11}
-                  color={obs.icon === 'alert' ? '#E0A33F' : '#C7A03A'}
-                />
-                <Text style={styles.obsText}>{obs.text}</Text>
-              </View>
-            ))}
-
-            {insight.conclusion !== '' && (
-              <>
-                <Text style={styles.cardLabel}>Conclusion</Text>
-                <Text style={styles.conclusion}>{insight.conclusion}</Text>
-              </>
-            )}
-
-            <TouchableOpacity
-              style={styles.explainButton}
-              onPress={() => openInsight(insight)}
-            >
-              <Text style={styles.explainText}>
-                Click here to view full explanation
-              </Text>
-            </TouchableOpacity>
-          </View>
-        ))}
 
       </ScrollView>
 
@@ -707,155 +659,6 @@ export default function Insights() {
                   {feedbackMessage[selected.domain] && (
                     <Text style={styles.feedbackMessage}>
                       {feedbackMessage[selected.domain]}
-                    </Text>
-                  )}
-                </View>
-
-                <TouchableOpacity
-                  style={styles.closeButton}
-                  onPress={() => setSelected(null)}
-                >
-                  <Text style={styles.closeText}>Close</Text>
-                </TouchableOpacity>
-              </>
-            ) : selected ? (
-
-              /* =================================================
-                  PLACEHOLDER INSIGHT POPUP
-              ================================================= */
-
-              <>
-                <View style={styles.modalHeader}>
-                  <Text style={styles.modalAspect}>{selected.aspect}</Text>
-
-                  <View style={styles.headerRight}>
-                    {isPremium && (
-                      <View style={styles.modeToggle}>
-                        {['simple', 'technical'].map((m) => (
-                          <TouchableOpacity key={m} onPress={() => setMode(m)}>
-                            <Text style={mode === m ? styles.modeActive : styles.mode}>
-                              {m === 'simple' ? 'Simple' : 'Technical'}
-                            </Text>
-                          </TouchableOpacity>
-                        ))}
-                      </View>
-                    )}
-
-                    <Text style={styles.confidence}>
-                      Confidence: {selected.confidence}%
-                    </Text>
-                  </View>
-                </View>
-
-                <Text style={styles.modalTitle}>{selected.title}</Text>
-                <Text style={styles.modalSummary}>{selected.summary}</Text>
-
-                {/* OBSERVATION */}
-                <Text style={styles.modalLabel}>Observation</Text>
-                <View style={styles.rule} />
-                <Text style={styles.modalBody}>{selected.observation}</Text>
-
-                {/* DATA USED */}
-                <Text style={styles.modalLabel}>Data Used</Text>
-                <View style={styles.rule} />
-
-                {selected.dataUsed.map((d, i) => (
-                  <Text key={i} style={styles.modalBody}>• {d}</Text>
-                ))}
-
-                {/* REASONING */}
-                <Text style={styles.modalLabel}>Reasoning</Text>
-                <View style={styles.rule} />
-
-                {reasoning.map((step, i) => (
-                  <Text key={i} style={styles.modalBody}>
-                    {i + 1}. {step}
-                  </Text>
-                ))}
-
-                {/* RECOMMENDATION */}
-                <Text style={styles.modalLabel}>Recommendation</Text>
-                <View style={styles.rule} />
-                <Text style={styles.modalBody}>{selected.recommendation}</Text>
-
-                {/* FOOTER */}
-                {selected.footer !== '' && (
-                  <Text style={styles.modalFooter}>{selected.footer}</Text>
-                )}
-
-                {/* FEEDBACK */}
-                <View style={styles.feedbackContainer}>
-                  <Text style={styles.feedbackQuestion}>
-                    Was this recommendation helpful?
-                  </Text>
-
-                  <View style={styles.feedbackButtons}>
-                    <TouchableOpacity
-                      style={[
-                        styles.feedbackButton,
-                        feedback[selected.id] === 'up' &&
-                          styles.feedbackButtonSelected,
-                      ]}
-                      onPress={() => toggleUp(selected.id)}
-                    >
-                      <Ionicons
-                        name={
-                          feedback[selected.id] === 'up'
-                            ? 'thumbs-up'
-                            : 'thumbs-up-outline'
-                        }
-                        size={20}
-                        color={
-                          feedback[selected.id] === 'up' ? '#020D09' : '#48DDB0'
-                        }
-                      />
-
-                      <Text
-                        style={[
-                          styles.feedbackText,
-                          feedback[selected.id] === 'up' &&
-                            styles.feedbackTextSelected,
-                        ]}
-                      >
-                        Helpful
-                      </Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={[
-                        styles.feedbackButton,
-                        feedback[selected.id] === 'down' &&
-                          styles.feedbackButtonSelected,
-                      ]}
-                      onPress={() => toggleDown(selected.id)}
-                    >
-                      <Ionicons
-                        name={
-                          feedback[selected.id] === 'down'
-                            ? 'thumbs-down'
-                            : 'thumbs-down-outline'
-                        }
-                        size={20}
-                        color={
-                          feedback[selected.id] === 'down' ? '#020D09' : '#E07A5F'
-                        }
-                      />
-
-                      <Text
-                        style={[
-                          styles.feedbackText,
-                          feedback[selected.id] === 'down' &&
-                            styles.feedbackTextSelected,
-                        ]}
-                      >
-                        Not helpful
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  {feedbackMessage[selected.id] && (
-                    <Text style={styles.feedbackMessage}>
-                      {feedbackMessage[selected.id]}
                     </Text>
                   )}
                 </View>

@@ -69,7 +69,7 @@ export default function LoseWeight() {
           Let us know what you would like to achieve so that we can guide you better
         </Text>
 
- <Text style={styles.label}>Since you chose to Lose Weight...</Text>
+        <Text style={styles.label}>Since you chose to Lose Weight...</Text>
         <Text style={styles.description}>What is your target weight?</Text>
 
         <View style={styles.weightTimeline}>
@@ -96,7 +96,7 @@ export default function LoseWeight() {
             <View style={styles.measureInput}>
               <TextInput
                 style={styles.input}
-                placeholder="e.g. 75"
+                placeholder="e.g. 62"
                 placeholderTextColor="#60766E"
                 keyboardType="numeric"
                 value={targetWeight}
@@ -110,9 +110,17 @@ export default function LoseWeight() {
           <View style={styles.totalWeightBox}>
             <Text style={styles.totalWeightLabel}>Total Weight Loss</Text>
             <Text style={styles.totalWeightValue}>
-              {totalGain !== null ? `${totalloss} kg` : '—'}
+              {totalLoss !== null ? `${totalLoss.toFixed(1)} kg` : '—'}
             </Text>
           </View>
+
+          {/* A target above the current weight means the fields are swapped. */}
+          {totalLoss !== null && totalLoss <= 0 && (
+            <Text style={styles.warning}>
+              Your target is higher than your current weight — did you mean
+              to gain weight instead?
+            </Text>
+          )}
         </View>
 
         {/* Buttons */}
@@ -212,6 +220,15 @@ const styles = StyleSheet.create({
   totalWeightLabel: { color: '#D4E6DF', fontSize: 12, marginBottom: 5 },
 
   totalWeightValue: { color: '#48DDB0', fontSize: 22, fontWeight: 'bold' },
+
+  warning: {
+    color: '#E0A33F',
+    fontSize: 10,
+    lineHeight: 14,
+    textAlign: 'center',
+    marginTop: 14,
+    paddingHorizontal: 40,
+  },
 
   buttonRow: {
     flexDirection: 'row',
