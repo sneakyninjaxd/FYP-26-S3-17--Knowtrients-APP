@@ -17,6 +17,18 @@ export default function Finish() {
     setSaving(true);
     await updateProfile({ onboarding_complete: true });
     setSaving(false);
+
+    /**
+     * replace() only swaps the top entry — the earlier onboarding steps are
+     * still underneath. dismissAll pops them so the tabs become the root and
+     * there's nothing to fall back to on logout, or swipe back into.
+     */
+    try {
+      router.dismissAll();
+    } catch {
+      // Nothing to dismiss if onboarding was entered directly.
+    }
+
     router.replace('/homepage');
   };
 

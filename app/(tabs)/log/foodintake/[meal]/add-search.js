@@ -64,7 +64,6 @@ export default function AddFood() {
     const timer = setTimeout(async () => {
       try {
         const data = await searchFoods(q);
-        console.log('search returned', JSON.stringify(data).slice(0, 300));
         if (id !== requestId.current) return;   // a newer keystroke won
         setResults(data);
       } catch (err) {
@@ -137,7 +136,6 @@ export default function AddFood() {
       : recent;
 
   const handleAdd = async (item) => {
-    console.log('tapped', item.key, 'has food?', !!item.food);
     setAddingId(item.key);
     try {
       if (item.food) {

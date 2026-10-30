@@ -36,6 +36,11 @@ function RootNavigator() {
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Protected guard={!!user}>
         <Stack.Screen name="(tabs)" />
+
+        {/* Onboarding. Guarded too, or logging out part-way through leaves
+            those screens in the stack and you land back on them. */}
+        <Stack.Screen name="Profile" />
+
         <Stack.Screen
           name="modal"
           options={{ presentation: "modal", title: "Modal" }}

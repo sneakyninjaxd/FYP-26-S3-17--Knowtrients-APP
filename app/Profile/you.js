@@ -1,8 +1,10 @@
 import { useProfile } from '@/contexts/profile-context';
-import { CONDITIONS, GENDERS } from '@/src/profile-options';
+import { CONDITIONS, COUNTRIES, GENDERS } from '@/src/profile-options';
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -19,11 +21,20 @@ export default function ProfileYou() {
   const [dateOfBirth, setDateOfBirth] = useState(profile.date_of_birth ?? '');
   const [gender, setGender] = useState(profile.gender);
   const [country, setCountry] = useState('');
+  const [showCountries, setShowCountries] = useState(false);
+  const [countryQuery, setCountryQuery] = useState('');
   const [heightCm, setHeightCm] = useState(profile.height_cm?.toString() ?? '');
   const [weightKg, setWeightKg] = useState(profile.weight_kg?.toString() ?? '');
   const [conditions, setConditions] = useState(profile.health_conditions ?? []);
   const [otherCondition, setOtherCondition] = useState(profile.other_condition ?? '');
   const [saving, setSaving] = useState(false);
+
+  /** A list this long needs filtering to be usable on a phone. */
+  const countryMatches = useMemo(() => {
+    const q = countryQuery.trim().toLowerCase();
+    if (!q) return COUNTRIES;
+    return COUNTRIES.filter((c) => c.toLowerCase().includes(q));
+  }, [countryQuery]);
 
   const toggleCondition = (id) => {
     setConditions((prev) => {
@@ -91,7 +102,6 @@ export default function ProfileYou() {
             value={dateOfBirth}
             onChangeText={setDateOfBirth}
           />
-          <Text style={styles.icon}>□</Text>
         </View>
 
         {/* Gender */}
@@ -117,16 +127,19 @@ export default function ProfileYou() {
 
         {/* Country — not stored by the backend yet */}
         <Text style={styles.label}>Country:</Text>
-        <View style={styles.countryInput}>
-          <TextInput
-            style={styles.countryText}
-            placeholder="Select Country"
-            placeholderTextColor="#60766E"
-            value={country}
-            onChangeText={setCountry}
-          />
-          <Text style={styles.arrow}>⌄</Text>
-        </View>
+
+        <TouchableOpacity
+          style={styles.countryInput}
+          onPress={() => {
+            setCountryQuery('');
+            setShowCountries(true);
+          }}
+        >
+          <Text style={country ? styles.countryValue : styles.countryPlaceholder}>
+            {country || 'Select Country'}
+          </Text>
+          <Ionicons name="chevron-down" size={14} color="#48DDB0" />
+        </TouchableOpacity>
 
         <Text style={styles.helperText}>
           Knowing your country allows Knowtrients to recommend local dishes to you.
@@ -214,6 +227,54 @@ export default function ProfileYou() {
         </TouchableOpacity>
 
       </ScrollView>
+
+      {/* Country picker */}
+      <Modal visible={showCountries} transparent animationType="fade">
+        <View style={styles.overlay}>
+          <View style={styles.pickerCard}>
+            <View style={styles.pickerHead}>
+              <Text style={styles.pickerTitle}>Select Country</Text>
+              <TouchableOpacity onPress={() => setShowCountries(false)} hitSlop={10}>
+                <Ionicons name="close" size={20} color="#60766E" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.pickerSearch}>
+              <Ionicons name="search" size={14} color="#60766E" />
+              <TextInput
+                style={styles.pickerSearchInput}
+                placeholder="Search..."
+                placeholderTextColor="#3A5049"
+                value={countryQuery}
+                onChangeText={setCountryQuery}
+                autoCorrect={false}
+                autoFocus
+              />
+            </View>
+
+            <ScrollView keyboardShouldPersistTaps="handled">
+              {countryMatches.map((c) => (
+                <TouchableOpacity
+                  key={c}
+                  style={styles.pickerOption}
+                  onPress={() => {
+                    setCountry(c);
+                    setShowCountries(false);
+                  }}
+                >
+                  <Text style={c === country ? styles.pickerOptionActive : styles.pickerOptionText}>
+                    {c}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+
+              {countryMatches.length === 0 && (
+                <Text style={styles.pickerEmpty}>No matches.</Text>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -279,8 +340,6 @@ const styles = StyleSheet.create({
 
   input: { flex: 1, color: '#FFFFFF', fontSize: 12, padding: 0 },
 
-  icon: { color: '#A5DCCC', fontSize: 18 },
-
   genderRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -318,9 +377,60 @@ const styles = StyleSheet.create({
     marginHorizontal: 25,
   },
 
-  countryText: { flex: 1, color: '#fff', fontSize: 12, padding: 0 },
+  countryValue: { flex: 1, color: '#fff', fontSize: 12 },
+  countryPlaceholder: { flex: 1, color: '#60766E', fontSize: 12 },
 
-  arrow: { color: '#48DDB0', fontSize: 18 },
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    justifyContent: 'center',
+    padding: 25,
+  },
+
+  pickerCard: {
+    backgroundColor: '#07140F',
+    borderRadius: 14,
+    padding: 16,
+    maxHeight: '75%',
+  },
+
+  pickerHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+
+  pickerTitle: { color: '#fff', fontSize: 16, fontFamily: 'serif' },
+
+  pickerSearch: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#0A1A14',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    height: 38,
+    marginBottom: 10,
+  },
+
+  pickerSearchInput: { flex: 1, color: '#fff', fontSize: 12, padding: 0 },
+
+  pickerOption: {
+    paddingVertical: 11,
+    borderBottomWidth: 1,
+    borderBottomColor: '#102A21',
+  },
+
+  pickerOptionText: { color: '#D4E6DF', fontSize: 12 },
+  pickerOptionActive: { color: '#48DDB0', fontSize: 12, fontWeight: '600' },
+
+  pickerEmpty: {
+    color: '#60766E',
+    fontSize: 11,
+    textAlign: 'center',
+    marginVertical: 20,
+  },
 
   helperText: {
     color: '#60766E',

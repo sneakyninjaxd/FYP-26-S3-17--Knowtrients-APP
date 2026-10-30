@@ -34,6 +34,17 @@ export default function Account() {
     );
   };
 
+  /**
+   * Clearing the user unmounts the tabs, but anything else left in the
+   * history stack — the onboarding screens, for instance — becomes the top
+   * of it. Replacing leaves nothing to fall back to, which is also what you
+   * want on a shared phone.
+   */
+  const handleLogOut = async () => {
+    await logOut();
+    router.replace('/login');
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView contentContainerStyle={{ paddingBottom: 30 + insets.bottom }}>
@@ -86,7 +97,7 @@ export default function Account() {
         </TouchableOpacity>
 
         {/* might need to end session and log out user after deleting account */}
-        <TouchableOpacity style={styles.activityBox3} onPress={logOut}>
+        <TouchableOpacity style={styles.activityBox3} onPress={handleLogOut}>
           <Text style={styles.activity3}>Log out</Text>
         </TouchableOpacity>
 
