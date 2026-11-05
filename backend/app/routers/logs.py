@@ -247,15 +247,26 @@ def upsert_sleep_log(
 
 @router.get("/logs/sleep", response_model=list[schemas.SleepLogResponse])
 def list_sleep_logs(
-    days: int = Query(default=7, ge=1, le=90),
+    days: int = Query(default=7, ge=1, le=365),
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    """
+    Sleep entries from the last `days` days, newest first.
+
+    Filters by date. An earlier version used `days` as a row limit — the last
+    N entries — so anyone with gaps in their logging got older entries
+    passed off as recent: three nights logged this week, asked for seven
+    days, returned seven entries reaching back weeks.
+    """
+    start = date_type.today() - timedelta(days=days - 1)
     return (
         db.query(models.SleepLog)
-        .filter(models.SleepLog.user_id == current_user.id)
+        .filter(
+            models.SleepLog.user_id == current_user.id,
+            models.SleepLog.log_date >= start,
+        )
         .order_by(models.SleepLog.log_date.desc())
-        .limit(days)
         .all()
     )
 
