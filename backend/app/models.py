@@ -45,24 +45,55 @@ def utcnow() -> datetime:
 # ---------------------------------------------------------------------------
 
 ROLE_USER = "user"
-ROLE_USER_ADMIN = "user_admin"
-ROLE_PLATFORM_MANAGER = "platform_manager"
+ROLE_ACCOUNT_ADMIN = "account_administrator"
+ROLE_PLATFORM_ADMIN = "platform_administrator"
 
-ROLES = (ROLE_USER, ROLE_USER_ADMIN, ROLE_PLATFORM_MANAGER)
+# The roles were renamed from User Admin and Platform Manager. The old
+# constant names stay as aliases so nothing that imports them breaks; the
+# stored values are the new slugs.
+ROLE_USER_ADMIN = ROLE_ACCOUNT_ADMIN
+ROLE_PLATFORM_MANAGER = ROLE_PLATFORM_ADMIN
+
+ROLES = (ROLE_USER, ROLE_ACCOUNT_ADMIN, ROLE_PLATFORM_ADMIN)
+
+# Every earlier name each role has had. Accepted on input and converted, and
+# used at start-up to rename roles already stored in the database.
+LEGACY_ROLES = {
+    "user_admin": ROLE_ACCOUNT_ADMIN,
+    "account_manager": ROLE_ACCOUNT_ADMIN,
+    "platform_manager": ROLE_PLATFORM_ADMIN,
+    "IT_manager": ROLE_PLATFORM_ADMIN,
+    "it_manager": ROLE_PLATFORM_ADMIN,
+}
+
+
+def normalize_role(role: str | None) -> str | None:
+    """Converts any earlier role name to the current one."""
+    if role is None:
+        return None
+    return LEGACY_ROLES.get(role, role)
+
 
 # Labels used by the admin website's User Type column and filters.
 ROLE_LABELS = {
     ROLE_USER: "User",
-    ROLE_USER_ADMIN: "User Admin",
-    ROLE_PLATFORM_MANAGER: "Platform Manager",
+    ROLE_ACCOUNT_ADMIN: "Account Administrator",
+    ROLE_PLATFORM_ADMIN: "Platform Administrator",
+}
+
+# Earlier labels, so a filter sent by an older page still matches.
+LEGACY_ROLE_LABELS = {
+    "User Admin": ROLE_ACCOUNT_ADMIN,
+    "Platform Manager": ROLE_PLATFORM_ADMIN,
+    "IT Manager": ROLE_PLATFORM_ADMIN,
 }
 
 # Display-id prefix per role, so an id communicates the account kind at a
 # glance in the admin tables.
 ROLE_ID_PREFIX = {
     ROLE_USER: "U",
-    ROLE_USER_ADMIN: "A",
-    ROLE_PLATFORM_MANAGER: "M",
+    ROLE_ACCOUNT_ADMIN: "A",
+    ROLE_PLATFORM_ADMIN: "P",
 }
 
 
@@ -84,8 +115,9 @@ class User(Base):
     # Administrative state (supports the suspend/reactivate admin functions).
     is_active = Column(Boolean, nullable=False, default=True)
 
-    # Role rather than a boolean: the admin website distinguishes User Admins
-    # from Platform Managers, and they have different permissions. See ROLES.
+    # Role rather than a boolean: the admin website distinguishes Account
+    # Administrators from Platform Administrators, and they have different
+    # permissions. See ROLES.
     role = Column(String, nullable=False, default="user", index=True)
 
     # Human-readable identifier shown in the admin tables (U001, U020).
@@ -116,7 +148,7 @@ class User(Base):
     @property
     def is_admin(self) -> bool:
         """Any staff role. Kept so existing checks read naturally."""
-        return self.role in (ROLE_USER_ADMIN, ROLE_PLATFORM_MANAGER)
+        return self.role in (ROLE_ACCOUNT_ADMIN, ROLE_PLATFORM_ADMIN)
 
     @property
     def full_name(self) -> str:
@@ -396,13 +428,61 @@ class RecommendationHistory(Base):
 # Support requests
 # ---------------------------------------------------------------------------
 
+# Support categories, grouped by type. Each maps to a display label.
+#
+# The app's two support forms — account help and bug reports — each offer
+# their own list, ending in an "others" option where the user types their own
+# description. That free text is stored in the request's `subject`.
+ACCOUNT_CATEGORIES = {
+    "password": "Password",
+    "account": "Account",
+    "subscription": "Subscription",
+    "account_other": "Other account issue",
+}
+
+BUG_CATEGORIES = {
+    "bug_logging": "Logging",
+    "bug_insights": "Insights",
+    "bug_profile": "Profile",
+    "bug_account": "Account",
+    "bug_other": "Other bug",
+}
+
+# Categories used before the split into account and bug types. Still accepted
+# so existing requests, and any older app build, keep working.
+LEGACY_CATEGORIES = {
+    "password_change": ("account", "Password"),
+    "account_recovery": ("account", "Account"),
+    "bug_report": ("bug", "Bug report"),
+    "other": ("account", "Other"),
+}
+
+# "Others" categories, which require the user's own description.
+OTHER_CATEGORIES = {"account_other", "bug_other"}
+
 REQUEST_CATEGORIES = (
-    "password_change",
-    "subscription",
-    "account_recovery",
-    "bug_report",
-    "other",
+    tuple(ACCOUNT_CATEGORIES)
+    + tuple(BUG_CATEGORIES)
+    + tuple(LEGACY_CATEGORIES)
 )
+
+
+def support_type(category: str) -> str:
+    """'account' or 'bug', derived from the category — not stored separately."""
+    if category in BUG_CATEGORIES:
+        return "bug"
+    if category in ACCOUNT_CATEGORIES:
+        return "account"
+    return LEGACY_CATEGORIES.get(category, ("account", ""))[0]
+
+
+def category_label(category: str) -> str:
+    """Display label for a category, including legacy ones."""
+    if category in ACCOUNT_CATEGORIES:
+        return ACCOUNT_CATEGORIES[category]
+    if category in BUG_CATEGORIES:
+        return BUG_CATEGORIES[category]
+    return LEGACY_CATEGORIES.get(category, ("account", "Other"))[1]
 
 REQUEST_STATUSES = ("unresolved", "resolved")
 
@@ -430,6 +510,25 @@ class SupportRequest(Base):
 
     status = Column(String, nullable=False, default="unresolved", index=True)
 
+    # "account" or "bug". Stored rather than worked out from the category each
+    # time, so the two kinds of request are separable directly in the
+    # database — in DBeaver, in reports, and in queries — and can be filtered
+    # with an index instead of a list of categories.
+    #
+    # Always set by the server from the category, never accepted from the
+    # client, so it can't disagree with the category. Existing rows are
+    # filled in at start-up by app/schema_upgrades.py.
+    support_type = Column(String, nullable=True, index=True)
+
+    # Bug reports only: whether the problem is still happening. Null for
+    # account requests. Added after the table existed, so the column is
+    # created by app/schema_upgrades.py rather than create_all.
+    is_persisting = Column(Boolean, nullable=True)
+
+    # When the most recent chat message was posted, for sorting the queue by
+    # activity. Also added via schema_upgrades.
+    last_message_at = Column(DateTime(timezone=True), nullable=True)
+
     # Admin response.
     reply = Column(Text, nullable=True)
     replied_at = Column(DateTime(timezone=True), nullable=True)
@@ -446,3 +545,303 @@ class SupportRequest(Base):
     __table_args__ = (
         Index("ix_support_status_created", "status", "created_at"),
     )
+
+
+# ===========================================================================
+# Added for the second round of frontend features.
+#
+# Every model below is a NEW table. None of them adds a column to an existing
+# table. That is deliberate: the project has no migration tool, and
+# `create_all` creates missing tables but never alters existing ones. Keeping
+# to new tables means a deploy picks these up automatically, with no database
+# reset and no loss of existing accounts or logs.
+# ===========================================================================
+
+
+PLANS = ("free", "premium")
+SUBSCRIPTION_STATUSES = ("active", "cancelled")
+
+
+class Subscription(Base):
+    """
+    A user's plan.
+
+    One row per user, created on first upgrade. A user with no row is on the
+    free plan — the absence of a subscription *is* the free tier, so new
+    accounts need no setup.
+
+    Payment is simulated (constraint C-09). No card number, expiry, CVV or
+    any other payment detail is stored, at any point.
+    """
+
+    __tablename__ = "subscriptions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), unique=True, nullable=False
+    )
+
+    plan = Column(String, nullable=False, default="free")
+    status = Column(String, nullable=False, default="active")
+
+    started_at = Column(DateTime(timezone=True), default=utcnow)
+    current_period_end = Column(DateTime(timezone=True), nullable=True)
+    cancelled_at = Column(DateTime(timezone=True), nullable=True)
+
+    created_at = Column(DateTime(timezone=True), default=utcnow)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+RECOMMENDATION_DOMAINS = ("diet", "fitness", "sleep")
+FEEDBACK_RATINGS = ("up", "down")
+
+
+class RecommendationFeedback(Base):
+    """
+    A user's rating of one recommendation, with an optional reason.
+
+    `domain` and `recommendation_ref` together identify the recommendation:
+    diet recommendations live in `recommendation_history` and fitness ones in
+    `fitness_recommendation_history`, so a single foreign key cannot point at
+    both. The pair is validated in the endpoint instead.
+
+    One row per user per recommendation. Re-rating replaces the previous
+    rating rather than adding another, so a user changing their mind is
+    counted once.
+    """
+
+    __tablename__ = "recommendation_feedback"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+
+    domain = Column(String, nullable=False)
+    recommendation_ref = Column(Integer, nullable=False)
+
+    rating = Column(String, nullable=False)  # up | down
+    reason = Column(Text, nullable=True)
+
+    created_at = Column(DateTime(timezone=True), default=utcnow)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id", "domain", "recommendation_ref", name="uq_feedback_user_rec"
+        ),
+        Index("ix_feedback_domain_rating", "domain", "rating"),
+    )
+
+
+class DeviceDailyMetrics(Base):
+    """
+    Steps and active calories synced from the user's device.
+
+    The app reads these from Google Health Connect (stretch goal D-03). They
+    were previously read on the phone and discarded; storing them lets the
+    fitness model use step counts and lets history survive a reinstall.
+
+    One row per user per day. A sync replaces the day's values rather than
+    adding to them, because Health Connect reports a running daily total — two
+    syncs on the same day would otherwise double-count.
+    """
+
+    __tablename__ = "device_daily_metrics"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    log_date = Column(Date, nullable=False, default=date.today)
+
+    steps = Column(Integer, nullable=True)
+    active_calories = Column(Float, nullable=True)
+    source = Column(String, nullable=False, default="health_connect")
+
+    created_at = Column(DateTime(timezone=True), default=utcnow)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "log_date", name="uq_device_metrics_user_date"),
+    )
+
+
+class FitnessRecommendationHistory(Base):
+    """
+    Every fitness recommendation served, with its inputs and SHAP attributions.
+
+    Kept separate from `recommendation_history` rather than adding a domain
+    column to it, so existing diet history needs no migration.
+
+    `data_completeness` records how much of the seven-day window actually had
+    logged data. It is stored alongside the model's confidence rather than
+    folded into it, so the two remain distinguishable: the model can be very
+    confident about a week that was barely logged, and the user should be
+    able to see both facts.
+    """
+
+    __tablename__ = "fitness_recommendation_history"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    log_date = Column(Date, nullable=False, default=date.today)
+
+    recommendation_id = Column(Integer, nullable=False)
+    recommendation = Column(String, nullable=False)
+    confidence = Column(Float, nullable=False)
+    data_completeness = Column(Float, nullable=False, default=0.0)
+
+    features = Column(Text, nullable=False)
+    factors = Column(Text, nullable=False)
+    explanation = Column(Text, nullable=False)
+    alternative = Column(Text, nullable=True)
+    insight = Column(Text, nullable=True)
+
+    model_version = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=utcnow, index=True)
+
+    __table_args__ = (
+        Index("ix_fitness_reco_user_date", "user_id", "log_date"),
+    )
+
+
+
+# ---------------------------------------------------------------------------
+# Support chat
+# ---------------------------------------------------------------------------
+
+SENDER_ROLES = ("user", "staff")
+
+
+class SupportMessage(Base):
+    """
+    One message in a support request's conversation.
+
+    Turns the single admin reply into a thread: the user and staff can go back
+    and forth on the same request. The request's original description is
+    stored as the first message, so a thread is complete on its own.
+
+    `read_at` is set when the other side opens the thread, which drives the
+    unread counts shown in the app and the admin queue.
+    """
+
+    __tablename__ = "support_messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    request_id = Column(
+        Integer, ForeignKey("support_requests.id", ondelete="CASCADE"), nullable=False
+    )
+    sender_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    sender_role = Column(String, nullable=False)  # user | staff
+
+    body = Column(Text, nullable=False)
+    read_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=utcnow, index=True)
+
+    sender = relationship("User")
+
+    __table_args__ = (
+        Index("ix_support_messages_request_created", "request_id", "created_at"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Satisfaction
+# ---------------------------------------------------------------------------
+
+SATISFACTION_DOMAINS = ("sleep", "activity", "food")
+
+
+class SatisfactionCheckin(Base):
+    """
+    Whether the user was satisfied with their sleep, activity or food.
+
+    Recorded either for a whole day (`log_ref` empty) or for one specific
+    entry — a particular meal, night or workout (`log_ref` set to that log's
+    id). The endpoint keeps one rating per user per day, or per entry, so
+    re-rating replaces rather than accumulates.
+
+    Uniqueness is enforced in the endpoint rather than by a database
+    constraint, because PostgreSQL treats NULLs as distinct: a unique index
+    over a nullable `log_ref` would allow any number of day-level ratings.
+    """
+
+    __tablename__ = "satisfaction_checkins"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+
+    domain = Column(String, nullable=False)  # sleep | activity | food
+    log_date = Column(Date, nullable=False, default=date.today)
+    log_ref = Column(Integer, nullable=True)
+
+    satisfied = Column(Boolean, nullable=False)
+    note = Column(Text, nullable=True)
+
+    created_at = Column(DateTime(timezone=True), default=utcnow)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+    __table_args__ = (
+        Index("ix_satisfaction_user_domain_date", "user_id", "domain", "log_date"),
+    )
+
+
+
+class SleepRecommendationHistory(Base):
+    """
+    Every sleep recommendation served, with its inputs and SHAP attributions.
+
+    A separate table, like fitness history, so no existing table needs a new
+    column. `nights_logged` records how many of the seven nights had an
+    entry, alongside `data_completeness`.
+    """
+
+    __tablename__ = "sleep_recommendation_history"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    log_date = Column(Date, nullable=False, default=date.today)
+
+    recommendation_id = Column(Integer, nullable=False)
+    recommendation = Column(String, nullable=False)
+    confidence = Column(Float, nullable=False)
+    data_completeness = Column(Float, nullable=False, default=0.0)
+    nights_logged = Column(Integer, nullable=False, default=0)
+
+    features = Column(Text, nullable=False)
+    factors = Column(Text, nullable=False)
+    explanation = Column(Text, nullable=False)
+    alternative = Column(Text, nullable=True)
+    insight = Column(Text, nullable=True)
+
+    model_version = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=utcnow, index=True)
+
+    __table_args__ = (
+        Index("ix_sleep_reco_user_date", "user_id", "log_date"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Request metrics
+# ---------------------------------------------------------------------------
+
+
+class RequestStat(Base):
+    """
+    Per-day request counters, for the Platform Administrator's performance
+    figures: how many requests, how many failed with a server error, and the
+    total time spent, from which the average response time follows.
+
+    Counted in memory by middleware and added in here in batches, rather than
+    written on every request — a database write per request would add to the
+    response times being measured.
+
+    One row per day. Several workers can add to the same day safely, because
+    every flush adds its counts rather than overwriting.
+    """
+
+    __tablename__ = "request_stats"
+
+    id = Column(Integer, primary_key=True, index=True)
+    day = Column(Date, nullable=False, unique=True, index=True)
+    request_count = Column(Integer, nullable=False, default=0)
+    error_count = Column(Integer, nullable=False, default=0)   # 5xx responses
+    total_ms = Column(Float, nullable=False, default=0.0)

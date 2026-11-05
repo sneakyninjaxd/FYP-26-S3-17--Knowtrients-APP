@@ -48,6 +48,9 @@ class UserResponse(BaseModel):
     # The admin website checks this to reject ordinary app users at login.
     role: str = "user"
     display_id: str | None = None
+    # Shown on the website's My Account pages.
+    user_type: str = "User"
+    created_at: datetime | None = None
 
     class Config:
         from_attributes = True
@@ -115,6 +118,9 @@ class ProfileResponse(BaseModel):
     onboarding_complete: bool = False
     age: float | None = None
     bmi: float | None = None
+    # Read from the subscriptions table. Included here because the app keeps
+    # `plan` on its profile object; previously it was held only on the phone.
+    plan: str = "free"
 
 
 # ---------------------------------------------------------------------------
@@ -310,7 +316,8 @@ class AdminAccountRow(BaseModel):
     first_name: str
     last_name: str
     email: EmailStr
-    user_type: str          # "User" | "User Admin" | "Platform Manager"
+    role: str = "user"      # slug, for the website's change-role control
+    user_type: str          # "User" | "Account Administrator" | "Platform Administrator"
     status: str             # "Active" | "Suspended"
     created_at: datetime | None = None
 
@@ -347,8 +354,9 @@ class RoleUpdate(BaseModel):
     @field_validator("role")
     @classmethod
     def known_role(cls, v):
-        from .models import ROLES
+        from .models import ROLES, normalize_role
 
+        v = normalize_role(v)
         if v not in ROLES:
             raise ValueError(f"role must be one of: {', '.join(ROLES)}")
         return v
@@ -360,8 +368,14 @@ class AdminDashboard(BaseModel):
     total_users: int = 0
     active_users: int = 0
     suspended_users: int = 0
+    account_administrators: int = 0
+    platform_administrators: int = 0
+    # Earlier names for the two counts above, kept for older pages.
     user_admins: int = 0
     platform_managers: int = 0
+    # Bug reports belong to Platform Administrators; reported here so the
+    # dashboard can show them without counting them as account requests.
+    open_bug_reports: int = 0
     new_users_7d: int = 0
     unresolved_requests: int = 0
     resolved_requests: int = 0
@@ -375,20 +389,46 @@ class AdminDashboard(BaseModel):
 
 
 class SupportRequestCreate(BaseModel):
-    """Raised from the mobile app."""
+    """
+    Raised from the mobile app's account-help or bug-report form.
 
-    category: str = "other"
-    subject: str = Field(min_length=3, max_length=200)
+    `category` decides the type: account categories (password, account,
+    subscription, account_other) or bug categories (bug_logging,
+    bug_insights, bug_profile, bug_account, bug_other).
+
+    `subject` is optional. Left out, it defaults to the category's label. For
+    an "others" category, `other_detail` carries the user's own short
+    description of the issue and becomes the subject.
+
+    `is_persisting` applies to bug reports only and is ignored for account
+    requests.
+    """
+
+    category: str = "account_other"
+    subject: str | None = Field(default=None, min_length=3, max_length=200)
     body: str = Field(min_length=3, max_length=5000)
+    other_detail: str | None = Field(default=None, max_length=200)
+    is_persisting: bool | None = None
 
-    @field_validator("category")
+    @field_validator("category", mode="before")
     @classmethod
-    def known_category(cls, v):
+    def normalise_category(cls, v):
+        """
+        Accepts the ids the app already sends — "account-others",
+        "bug-other" — by normalising hyphens and the plural. This lets the
+        existing account form work without an app update.
+        """
         from .models import REQUEST_CATEGORIES
 
-        if v not in REQUEST_CATEGORIES:
+        if v is None:
+            return "account_other"
+
+        key = str(v).strip().lower().replace("-", "_")
+        key = {"account_others": "account_other", "bug_others": "bug_other"}.get(key, key)
+
+        if key not in REQUEST_CATEGORIES:
             raise ValueError(f"category must be one of: {', '.join(REQUEST_CATEGORIES)}")
-        return v
+        return key
 
 
 class SupportRequestReply(BaseModel):
@@ -408,6 +448,18 @@ class SupportRequestResponse(BaseModel):
     replied_at: datetime | None = None
     resolved_at: datetime | None = None
 
+    # Derived from the category, so the app and admin site can group and
+    # label requests without keeping their own category tables.
+    support_type: str = "account"          # account | bug
+    category_label: str = ""
+    is_persisting: bool | None = None
+
+    # Chat. `unread_count` is messages from the other side not yet read by
+    # whoever is asking — the user in the app, staff on the admin site.
+    message_count: int = 0
+    unread_count: int = 0
+    last_message_at: datetime | None = None
+
     # Denormalised for the admin list, which shows who raised each request.
     user_id: int
     user_display_id: str | None = None
@@ -417,6 +469,84 @@ class SupportRequestResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class SupportMessageCreate(BaseModel):
+    body: str = Field(min_length=1, max_length=5000)
+
+
+class SupportMessageResponse(BaseModel):
+    id: int
+    request_id: int
+    sender_role: str           # user | staff
+    sender_name: str | None = None
+    body: str
+    created_at: datetime | None = None
+    read_at: datetime | None = None
+    is_mine: bool = False
+
+
+class SupportThread(BaseModel):
+    """A support request with its full conversation."""
+
+    request: SupportRequestResponse
+    messages: list[SupportMessageResponse]
+
+
+# ---------------------------------------------------------------------------
+# Satisfaction
+# ---------------------------------------------------------------------------
+
+
+class SatisfactionCreate(BaseModel):
+    """
+    Rates the user's sleep, activity or food as satisfied or not.
+
+    Leave `log_ref` out to rate the whole day; set it to a specific log's id
+    to rate one meal, night or workout.
+    """
+
+    domain: str
+    satisfied: bool
+    log_date: date | None = None
+    log_ref: int | None = None
+    note: str | None = Field(default=None, max_length=1000)
+
+    @field_validator("domain")
+    @classmethod
+    def known_domain(cls, v):
+        from .models import SATISFACTION_DOMAINS
+
+        v = v.strip().lower()
+        # The app labels the activity screen "Activities".
+        v = {"activities": "activity", "meal": "food", "meals": "food"}.get(v, v)
+        if v not in SATISFACTION_DOMAINS:
+            raise ValueError(f"domain must be one of: {', '.join(SATISFACTION_DOMAINS)}")
+        return v
+
+
+class SatisfactionResponse(BaseModel):
+    id: int
+    domain: str
+    log_date: date
+    log_ref: int | None = None
+    satisfied: bool
+    note: str | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+    class Config:
+        from_attributes = True
+
+
+class SatisfactionSummary(BaseModel):
+    """Satisfaction rate for one domain over a period."""
+
+    domain: str
+    satisfied: int = 0
+    not_satisfied: int = 0
+    total: int = 0
+    satisfied_rate: float | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -478,3 +608,249 @@ class FairnessReport(BaseModel):
     by_age: list[FairnessGroup] = []
     by_bmi: list[FairnessGroup] = []
     caveat: str
+
+
+# ---------------------------------------------------------------------------
+# Subscription
+# ---------------------------------------------------------------------------
+
+
+class SubscriptionResponse(BaseModel):
+    plan: str = "free"
+    status: str = "active"
+    started_at: datetime | None = None
+    current_period_end: datetime | None = None
+    cancelled_at: datetime | None = None
+    is_premium: bool = False
+
+
+# ---------------------------------------------------------------------------
+# Recommendation feedback
+# ---------------------------------------------------------------------------
+
+
+class FeedbackCreate(BaseModel):
+    """
+    Rates one recommendation.
+
+    `recommendation_ref` is the `history_id` returned with the recommendation
+    — not `recommendation_id`, which identifies the *kind* of advice and is
+    shared by every user who received it.
+    """
+
+    domain: str = "diet"
+    recommendation_ref: int
+    rating: str
+    reason: str | None = Field(default=None, max_length=1000)
+
+    @field_validator("domain")
+    @classmethod
+    def known_domain(cls, v):
+        from .models import RECOMMENDATION_DOMAINS
+
+        if v not in RECOMMENDATION_DOMAINS:
+            raise ValueError(f"domain must be one of: {', '.join(RECOMMENDATION_DOMAINS)}")
+        return v
+
+    @field_validator("rating")
+    @classmethod
+    def known_rating(cls, v):
+        from .models import FEEDBACK_RATINGS
+
+        if v not in FEEDBACK_RATINGS:
+            raise ValueError(f"rating must be one of: {', '.join(FEEDBACK_RATINGS)}")
+        return v
+
+
+class FeedbackResponse(BaseModel):
+    id: int
+    domain: str
+    recommendation_ref: int
+    rating: str
+    reason: str | None = None
+    created_at: datetime | None = None
+
+    class Config:
+        from_attributes = True
+
+
+# ---------------------------------------------------------------------------
+# Device metrics (Health Connect)
+# ---------------------------------------------------------------------------
+
+
+class DeviceMetricsCreate(BaseModel):
+    steps: int | None = Field(default=None, ge=0, le=150000)
+    active_calories: float | None = Field(default=None, ge=0, le=20000)
+    source: str = "health_connect"
+    log_date: date | None = None
+
+
+class DeviceMetricsResponse(BaseModel):
+    log_date: date
+    steps: int | None = None
+    active_calories: float | None = None
+    source: str
+
+    class Config:
+        from_attributes = True
+
+
+# ---------------------------------------------------------------------------
+# Activity range
+# ---------------------------------------------------------------------------
+
+
+class ActivityDay(BaseModel):
+    """One day in a range, with logged activity and any synced steps."""
+
+    date: date
+    minutes: float = 0
+    calories: float = 0
+    count: int = 0
+    steps: int | None = None
+
+
+# ---------------------------------------------------------------------------
+# Fitness recommendation
+# ---------------------------------------------------------------------------
+
+
+class FitnessFactor(BaseModel):
+    feature: str
+    label: str
+    value: float
+    contribution: float
+    direction: str
+    imputed: bool = False
+
+
+class FitnessAlternative(BaseModel):
+    recommendation: str
+    confidence: float
+
+
+class FitnessRecommendationResponse(BaseModel):
+    """
+    Same core shape as the diet recommendation, so the app can render both
+    with one component, plus three fitness-specific fields:
+
+    - data_completeness: share of the week that was logged (0-1). Reported
+      separately from confidence so a barely-logged week can't pass as a
+      certain one.
+    - next_step: a concrete action sized from the user's own numbers.
+    - insight: the result shaped like an entry in the app's src/insights.js,
+      ready to replace the hardcoded Activity card.
+    """
+
+    history_id: int | None = None
+    recommendation: str
+    recommendation_id: int
+    confidence: float
+    data_completeness: float
+    explanation: list[str]
+    factors: list[FitnessFactor]
+    alternative: FitnessAlternative
+    next_step: str
+    insight: dict
+    window_start: date
+    window_end: date
+    cached: bool = False
+
+
+
+class SleepRecommendationResponse(FitnessRecommendationResponse):
+    """Same shape as the fitness response, plus how many nights were logged."""
+
+    nights_logged: int = 0
+
+
+
+# ---------------------------------------------------------------------------
+# Account administration — staff creation and own-account changes
+# ---------------------------------------------------------------------------
+
+
+class StaffAccountCreate(BaseModel):
+    """An Account Administrator creating another administrator."""
+
+    first_name: str = Field(min_length=1, max_length=100)
+    last_name: str = Field(min_length=1, max_length=100)
+    email: EmailStr
+    password: str = Field(min_length=8, max_length=200)
+    role: str
+
+    @field_validator("first_name", "last_name")
+    @classmethod
+    def not_blank(cls, v):
+        if not v.strip():
+            raise ValueError("First and last name are required.")
+        return v.strip()
+
+    @field_validator("role")
+    @classmethod
+    def staff_role(cls, v):
+        from .models import ROLE_ACCOUNT_ADMIN, ROLE_PLATFORM_ADMIN, normalize_role
+
+        v = normalize_role(v)
+        if v not in (ROLE_ACCOUNT_ADMIN, ROLE_PLATFORM_ADMIN):
+            raise ValueError(
+                "Role must be Account Administrator or Platform Administrator."
+            )
+        return v
+
+
+class RegisterRequest(BaseModel):
+    """
+    Public sign-up from the website's register page.
+
+    Unlike /signup, which the app uses, there is no retype field — the page
+    checks the two password boxes match before sending.
+    """
+
+    first_name: str = Field(min_length=1, max_length=100)
+    last_name: str = Field(min_length=1, max_length=100)
+    email: EmailStr
+    password: str
+
+    @field_validator("first_name", "last_name")
+    @classmethod
+    def not_blank(cls, v):
+        if not v.strip():
+            raise ValueError("First and last name are required.")
+        return v.strip()
+
+    @field_validator("password")
+    @classmethod
+    def password_strength(cls, v):
+        if len(v) < 8:
+            raise ValueError("Password must be at least 8 characters long")
+        return v
+
+
+class UpdateMe(BaseModel):
+    """Own name. Email, id and role are not editable here."""
+
+    first_name: str = Field(min_length=1, max_length=100)
+    last_name: str = Field(min_length=1, max_length=100)
+
+    @field_validator("first_name", "last_name")
+    @classmethod
+    def not_blank(cls, v):
+        if not v.strip():
+            raise ValueError("First and last name are required.")
+        return v.strip()
+
+
+class ChangePassword(BaseModel):
+    current_password: str = Field(min_length=1)
+    new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def new_password_rules(cls, v, info):
+        if len(v) < 8:
+            raise ValueError("New password must be at least 8 characters.")
+        if info.data.get("current_password") == v:
+            raise ValueError("New password must be different from your current password.")
+        return v

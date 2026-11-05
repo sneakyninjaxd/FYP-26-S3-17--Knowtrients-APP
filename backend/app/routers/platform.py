@@ -297,3 +297,152 @@ def fairness_report(
             "with few recommendations are not meaningful."
         ),
     )
+
+
+# ---------------------------------------------------------------------------
+# Recommendation feedback (Review Flagged Explanations)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/feedback")
+def review_feedback(
+    rating: str | None = Query(default="down", description="up | down | all"),
+    domain: str | None = Query(default=None, description="diet | fitness"),
+    limit: int = Query(default=100, ge=1, le=500),
+    db: Session = Depends(get_db),
+    _: models.User = Depends(get_current_platform_manager),
+):
+    """
+    User ratings of recommendations, newest first — thumbs-down by default.
+
+    A thumbs-down always carries the user's reason, so each entry here says
+    what the user thought was wrong. Each row includes the recommendation
+    and explanation the user actually saw, so a Platform Manager can judge
+    whether the complaint is about the advice or about how it was explained.
+
+    Users are identified by display id only. Reviewing an explanation does
+    not require knowing who received it.
+    """
+    query = db.query(models.RecommendationFeedback)
+    if rating and rating != "all":
+        query = query.filter(models.RecommendationFeedback.rating == rating)
+    if domain:
+        query = query.filter(models.RecommendationFeedback.domain == domain)
+
+    entries = (
+        query.order_by(models.RecommendationFeedback.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+
+    tables = {
+        "diet": models.RecommendationHistory,
+        "fitness": models.FitnessRecommendationHistory,
+        "sleep": models.SleepRecommendationHistory,
+    }
+
+    out = []
+    for entry in entries:
+        table = tables.get(entry.domain)
+        rec = (
+            db.query(table).filter(table.id == entry.recommendation_ref).first()
+            if table
+            else None
+        )
+        user = db.query(models.User).filter(models.User.id == entry.user_id).first()
+        out.append(
+            {
+                "id": entry.id,
+                "domain": entry.domain,
+                "rating": entry.rating,
+                "reason": entry.reason,
+                "created_at": entry.created_at,
+                "user_display_id": user.display_id if user else None,
+                "recommendation": rec.recommendation if rec else None,
+                "confidence": rec.confidence if rec else None,
+                "explanation": json.loads(rec.explanation) if rec else [],
+            }
+        )
+    return out
+
+
+@router.get("/feedback/summary")
+def feedback_summary(
+    db: Session = Depends(get_db),
+    _: models.User = Depends(get_current_platform_manager),
+):
+    """
+    Helpfulness rate per recommendation type.
+
+    Shows which kinds of advice users find least helpful, which is where a
+    Platform Manager should look first when reviewing explanations.
+    """
+    tables = {
+        "diet": models.RecommendationHistory,
+        "fitness": models.FitnessRecommendationHistory,
+        "sleep": models.SleepRecommendationHistory,
+    }
+
+    summary = []
+    for domain, table in tables.items():
+        rows = (
+            db.query(
+                table.recommendation,
+                models.RecommendationFeedback.rating,
+                func.count(models.RecommendationFeedback.id),
+            )
+            .join(
+                table,
+                (table.id == models.RecommendationFeedback.recommendation_ref)
+                & (models.RecommendationFeedback.domain == domain),
+            )
+            .group_by(table.recommendation, models.RecommendationFeedback.rating)
+            .all()
+        )
+
+        grouped: dict[str, dict] = {}
+        for recommendation, rating, count in rows:
+            g = grouped.setdefault(recommendation, {"up": 0, "down": 0})
+            g[rating] = count
+
+        for recommendation, counts in grouped.items():
+            total = counts["up"] + counts["down"]
+            summary.append(
+                {
+                    "domain": domain,
+                    "recommendation": recommendation,
+                    "helpful": counts["up"],
+                    "not_helpful": counts["down"],
+                    "total": total,
+                    "helpful_rate": round(counts["up"] / total, 3) if total else None,
+                }
+            )
+
+    summary.sort(key=lambda s: (s["helpful_rate"] is None, s["helpful_rate"] or 0))
+    return summary
+
+
+# ---------------------------------------------------------------------------
+# User satisfaction
+# ---------------------------------------------------------------------------
+
+
+@router.get("/satisfaction", response_model=list[schemas.SatisfactionSummary])
+def platform_satisfaction(
+    days: int = Query(default=30, ge=1, le=365),
+    db: Session = Depends(get_db),
+    _: models.User = Depends(get_current_platform_manager),
+):
+    """
+    How satisfied users are with their sleep, activity and food, across the
+    whole platform. Aggregate counts only — no individual ratings.
+    """
+    from .satisfaction import _summarise
+
+    start = date_type.today() - timedelta(days=days - 1)
+    rows = (
+        db.query(models.SatisfactionCheckin.domain, models.SatisfactionCheckin.satisfied)
+        .filter(models.SatisfactionCheckin.log_date >= start)
+        .all()
+    )
+    return _summarise(rows)

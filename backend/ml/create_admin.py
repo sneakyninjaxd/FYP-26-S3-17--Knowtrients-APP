@@ -1,5 +1,5 @@
 """
-Creates a staff account (User Admin or Platform Manager).
+Creates a staff account (Account Administrator or Platform Administrator).
 
 Staff accounts cannot be created through the public API — the admin website's
 signup page must not be able to mint administrators, or anyone who finds the
@@ -9,16 +9,30 @@ to the server or database.
 Usage, from the backend/ directory:
 
     python ml/create_admin.py --email a@b.com --password secret123 \
-        --first Ada --last Lovelace --role platform_manager
+        --first Ada --last Lovelace --role platform_administrator
 
     python ml/create_admin.py --list
 
-Roles: user_admin, platform_manager
+To create an account on the live database, pass its external URL rather than
+editing .env — it applies to this run only:
+
+    python ml/create_admin.py --email ... --password ... --role platform_administrator \
+        --database-url "postgresql://..."
+
+Roles: account_administrator, platform_administrator
+(the earlier names user_admin and platform_manager are still accepted)
 """
 
 import argparse
 import os
 import sys
+
+# Must take effect before the database module is imported, because the
+# engine is created at import time.
+if "--database-url" in sys.argv:
+    _i = sys.argv.index("--database-url")
+    if _i + 1 < len(sys.argv):
+        os.environ["DATABASE_URL"] = sys.argv[_i + 1]
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -28,9 +42,10 @@ from app.routers.auth_routes import assign_display_id  # noqa: E402
 
 
 def create(email: str, password: str, first: str, last: str, role: str) -> None:
-    if role not in (models.ROLE_USER_ADMIN, models.ROLE_PLATFORM_MANAGER):
+    role = models.normalize_role(role)
+    if role not in (models.ROLE_ACCOUNT_ADMIN, models.ROLE_PLATFORM_ADMIN):
         raise SystemExit(
-            f"role must be {models.ROLE_USER_ADMIN} or {models.ROLE_PLATFORM_MANAGER}"
+            f"role must be {models.ROLE_ACCOUNT_ADMIN} or {models.ROLE_PLATFORM_ADMIN}"
         )
     if len(password) < 8:
         raise SystemExit("Password must be at least 8 characters long")
@@ -99,7 +114,11 @@ def main() -> None:
     parser.add_argument("--password")
     parser.add_argument("--first", default="Admin")
     parser.add_argument("--last", default="User")
-    parser.add_argument("--role", default=models.ROLE_USER_ADMIN)
+    parser.add_argument("--role", default=models.ROLE_ACCOUNT_ADMIN)
+    parser.add_argument(
+        "--database-url",
+        help="Create the account in this database (e.g. the live one) instead of the one in .env",
+    )
     args = parser.parse_args()
 
     if args.list:

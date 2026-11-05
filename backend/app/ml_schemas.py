@@ -30,6 +30,9 @@ class Alternative(BaseModel):
 
 
 class RecommendationResponse(BaseModel):
+    # Identifies this specific recommendation, for feedback. Distinct from
+    # recommendation_id, which identifies the kind of advice.
+    history_id: int | None = None
     recommendation: str
     recommendation_id: int
     confidence: float

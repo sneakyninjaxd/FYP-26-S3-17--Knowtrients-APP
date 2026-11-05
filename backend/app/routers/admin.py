@@ -1,15 +1,19 @@
 """
 Administrative endpoints backing the companion website's admin area.
 
+Everything under /admin belongs to Account Administrators. Platform
+Administrators have no account management beyond their own details, which
+they change through /me.
+
 Permissions follow the two staff roles the site distinguishes:
 
-* User Admin      — accounts: viewing, suspending, roles, deletion, and the
-                    support request queue
-* Platform Manager — system performance: the nutrition catalogue, fairness
-                     auditing, and platform metrics
+* Account Administrator  — accounts: creating staff, viewing, suspending,
+                           roles, deletion, and the account support queue
+* Platform Administrator — system performance: the nutrition catalogue, model
+                           accuracy and fairness, metrics, and bug reports
 
 The split is by subject matter, not seniority. Neither role outranks the
-other, so account-level authority sits entirely with User Admins even though
+other, so account-level authority sits entirely with Account Administrators even though
 some of those actions are irreversible.
 
 Both are checked explicitly rather than through a single `is_admin` flag, so
@@ -24,7 +28,8 @@ from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..database import get_db
-from ..deps import get_current_admin, get_current_user_admin
+from ..deps import get_current_account_admin
+from .. import auth
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -40,6 +45,7 @@ def _row(user: models.User) -> schemas.AdminAccountRow:
         first_name=user.first_name,
         last_name=user.last_name,
         email=user.email,
+        role=user.role,
         user_type=models.ROLE_LABELS.get(user.role, user.role),
         status="Active" if user.is_active else "Suspended",
         created_at=user.created_at,
@@ -53,13 +59,15 @@ def _row(user: models.User) -> schemas.AdminAccountRow:
 
 @router.get("/accounts", response_model=list[schemas.AdminAccountRow])
 def list_accounts(
-    user_type: str | None = Query(default=None, description="User | User Admin | Platform Manager"),
+    user_type: str | None = Query(
+        default=None, description="User | Account Administrator | Platform Administrator"
+    ),
     q: str | None = Query(default=None, description="Search id, name or email"),
     status_filter: str | None = Query(default=None, alias="status"),
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
-    _: models.User = Depends(get_current_admin),
+    _: models.User = Depends(get_current_account_admin),
 ):
     """Accounts table, with the same filters the website's toolbar offers."""
     query = db.query(models.User)
@@ -67,7 +75,8 @@ def list_accounts(
     if user_type and user_type != "All":
         # The site sends display labels; map back to the stored role.
         role = next(
-            (r for r, label in models.ROLE_LABELS.items() if label == user_type), user_type
+            (r for r, label in models.ROLE_LABELS.items() if label == user_type),
+            models.LEGACY_ROLE_LABELS.get(user_type, models.normalize_role(user_type)),
         )
         query = query.filter(models.User.role == role)
 
@@ -91,11 +100,51 @@ def list_accounts(
     return [_row(u) for u in users]
 
 
+@router.post(
+    "/accounts",
+    response_model=schemas.AdminAccountDetail,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_staff_account(
+    payload: schemas.StaffAccountCreate,
+    db: Session = Depends(get_db),
+    _: models.User = Depends(get_current_account_admin),
+):
+    """
+    Creates an administrator account. Account Administrators only.
+
+    This is the only way to create staff through the API. Public sign-up —
+    /signup and /register — always creates an ordinary app user, so nobody
+    can make themselves an administrator.
+    """
+    email = payload.email.lower().strip()
+    if db.query(models.User).filter(models.User.email == email).first():
+        raise HTTPException(status_code=409, detail="An account with this email already exists.")
+
+    user = models.User(
+        email=email,
+        first_name=payload.first_name,
+        last_name=payload.last_name,
+        hashed_password=auth.hash_password(payload.password),
+        role=payload.role,
+        is_active=True,
+    )
+    db.add(user)
+    db.flush()
+
+    from .auth_routes import assign_display_id
+
+    assign_display_id(db, user)
+    db.commit()
+    db.refresh(user)
+    return get_account(user.id, db)
+
+
 @router.get("/accounts/{user_id}", response_model=schemas.AdminAccountDetail)
 def get_account(
     user_id: int,
     db: Session = Depends(get_db),
-    _: models.User = Depends(get_current_admin),
+    _: models.User = Depends(get_current_account_admin),
 ):
     """View Account page: profile summary plus activity counts."""
     user = db.query(models.User).filter(models.User.id == user_id).first()
@@ -155,7 +204,7 @@ def set_account_status(
     user_id: int,
     payload: schemas.StatusUpdate,
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(get_current_admin),
+    current_admin: models.User = Depends(get_current_account_admin),
 ):
     """Suspend or reactivate an account (URS 3.3)."""
     user = db.query(models.User).filter(models.User.id == user_id).first()
@@ -167,13 +216,14 @@ def set_account_status(
     if user.id == current_admin.id and not payload.is_active:
         raise HTTPException(status_code=400, detail="You cannot suspend your own account")
 
-    # Staff accounts are still account business, so User Admins handle them.
-    # A Platform Manager suspending an admin would be reaching outside their
+    # Staff accounts are still account business, so Account Administrators
+    # handle them. A Platform Administrator suspending an admin would be
+    # reaching outside their
     # remit, and would let one role disable oversight of the other.
     if user.is_admin and current_admin.role != models.ROLE_USER_ADMIN:
         raise HTTPException(
             status_code=403,
-            detail="Only a User Admin can change the status of a staff account",
+            detail="Only an Account Administrator can change the status of a staff account",
         )
 
     user.is_active = payload.is_active
@@ -187,9 +237,9 @@ def set_account_role(
     user_id: int,
     payload: schemas.RoleUpdate,
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(get_current_user_admin),
+    current_admin: models.User = Depends(get_current_account_admin),
 ):
-    """Change an account's role. User Admins only."""
+    """Change an account's role. Account Administrators only."""
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if user is None:
         raise HTTPException(status_code=404, detail="Account not found")
@@ -197,7 +247,7 @@ def set_account_role(
     # Demoting yourself would leave nobody able to promote anyone back.
     if user.id == current_admin.id and payload.role != models.ROLE_USER_ADMIN:
         raise HTTPException(
-            status_code=400, detail="You cannot remove your own User Admin role"
+            status_code=400, detail="You cannot remove your own Account Administrator role"
         )
 
     user.role = payload.role
@@ -210,12 +260,12 @@ def set_account_role(
 def delete_account(
     user_id: int,
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(get_current_user_admin),
+    current_admin: models.User = Depends(get_current_account_admin),
 ):
     """
     Permanently delete an account and everything belonging to it.
 
-    User Admins only, and irreversible — cascades remove profile, logs and
+    Account Administrators only, and irreversible — cascades remove profile, logs and
     recommendation history.
     """
     user = db.query(models.User).filter(models.User.id == user_id).first()
@@ -236,7 +286,7 @@ def delete_account(
 @router.get("/dashboard", response_model=schemas.AdminDashboard)
 def dashboard(
     db: Session = Depends(get_db),
-    _: models.User = Depends(get_current_admin),
+    _: models.User = Depends(get_current_account_admin),
 ):
     """Counts for the admin dashboard tiles."""
     today = date_type.today()
@@ -255,10 +305,15 @@ def dashboard(
         or 0
     )
 
-    def count_requests(request_status):
+    # Bug reports belong to Platform Administrators, so the Account
+    # Administrator's request counts cover account requests only.
+    def count_requests(request_status, kind="account"):
         return (
             db.query(func.count(models.SupportRequest.id))
-            .filter(models.SupportRequest.status == request_status)
+            .filter(
+                models.SupportRequest.status == request_status,
+                models.SupportRequest.support_type == kind,
+            )
             .scalar()
             or 0
         )
@@ -280,8 +335,11 @@ def dashboard(
         total_users=count_users(role=models.ROLE_USER),
         active_users=count_users(role=models.ROLE_USER, is_active=True),
         suspended_users=count_users(role=models.ROLE_USER, is_active=False),
-        user_admins=count_users(role=models.ROLE_USER_ADMIN),
-        platform_managers=count_users(role=models.ROLE_PLATFORM_MANAGER),
+        account_administrators=count_users(role=models.ROLE_ACCOUNT_ADMIN),
+        platform_administrators=count_users(role=models.ROLE_PLATFORM_ADMIN),
+        user_admins=count_users(role=models.ROLE_ACCOUNT_ADMIN),
+        platform_managers=count_users(role=models.ROLE_PLATFORM_ADMIN),
+        open_bug_reports=count_requests("unresolved", kind="bug"),
         new_users_7d=new_users_7d,
         unresolved_requests=count_requests("unresolved"),
         resolved_requests=count_requests("resolved"),
