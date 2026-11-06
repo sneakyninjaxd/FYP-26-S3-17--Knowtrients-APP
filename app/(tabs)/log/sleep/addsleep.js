@@ -1,9 +1,11 @@
 import { useSleep } from '@/contexts/sleep-context';
 import { toLogDate } from '@/services/api';
 import { Ionicons } from '@expo/vector-icons';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import {
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -72,7 +74,8 @@ export default function AddSleep() {
    * sleep screen was showing when it sent us here.
    */
   const { date: dateParam } = useLocalSearchParams();
-  const date = parseLogDate(dateParam) ?? new Date();
+  const [date, setDate] = useState(() => parseLogDate(dateParam) ?? new Date());
+  const [showPicker, setShowPicker] = useState(false);
 
   const [sleep, setSleep] = useState({ hour: 11, minute: '00', period: 'pm' });
   const [wake, setWake] = useState({ hour: 7, minute: '00', period: 'am' });
@@ -150,17 +153,32 @@ export default function AddSleep() {
           woke, so last night belongs to today.
         </Text>
 
-        {/* Which night this is for. Chosen with the calendar on My Sleep —
-            one place to pick the day, rather than two that can disagree. */}
+        {/* Which night this is for — a night missed at the time can still be
+            filled in later. Starts on whichever day My Sleep was showing. */}
         <Text style={styles.label}>Date</Text>
-        <View style={styles.dateBox}>
+        <TouchableOpacity
+          style={styles.dateBox}
+          onPress={() => setShowPicker(true)}
+        >
           <Text style={styles.dateText}>
             {date.toLocaleDateString('en-GB', {
               weekday: 'long', day: 'numeric', month: 'long',
             })}
           </Text>
-          <Ionicons name="calendar-outline" size={18} color="#3A5049" />
-        </View>
+          <Ionicons name="calendar-outline" size={18} color="#48DDB0" />
+        </TouchableOpacity>
+
+        {showPicker && (
+          <DateTimePicker
+            value={date}
+            mode="date"
+            maximumDate={new Date()}
+            onChange={(event, selected) => {
+              setShowPicker(Platform.OS === 'ios');
+              if (selected) setDate(selected);
+            }}
+          />
+        )}
 
         {/* Time summary */}
         <View style={styles.timeRow}>

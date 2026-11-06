@@ -1,6 +1,6 @@
 import { useSleep } from '@/contexts/sleep-context';
 import { useSubscription } from '@/contexts/subscription-context';
-import { RANGES } from '@/src/ranges';
+import { bucketsFor, RANGES } from '@/src/ranges';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
@@ -72,18 +72,28 @@ export default function SleepStatistics() {
     return `${h % 12 || 12}.${String(m).padStart(2, '0')}${h < 12 ? 'am' : 'pm'}`;
   };
 
-  // chart data for the selected range
+  /**
+   * One bar per night for a week, per week for a month, per month for a year.
+   *
+   * A bucket's value is the mean of the nights actually logged in it, not of
+   * every date it covers — a week with two nights recorded should read as how
+   * those nights went, not be halved by five blanks.
+   */
   const chart = useMemo(() => {
-    const span = Math.min(range.days, 7);
-    return Array.from({ length: span }, (_, i) => {
-      const d = new Date();
-      d.setDate(d.getDate() - (span - 1 - i));
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-      const log = sleepLogs.find((s) => s.log_date === key);
+    const byDate = new Map(sleepLogs.map((s) => [s.log_date, s]));
+
+    return bucketsFor(range.days).map((bucket) => {
+      const hours = bucket.keys
+        .map((k) => byDate.get(k)?.hours)
+        .filter((h) => typeof h === 'number' && h > 0);
 
       return {
-        label: d.toLocaleDateString('en-GB', { weekday: 'short' }),
-        value: log?.hours ?? 0,
+        label: bucket.label,
+        sub: bucket.sub,
+        nights: hours.length,
+        value: hours.length
+          ? hours.reduce((sum, h) => sum + h, 0) / hours.length
+          : 0,
       };
     });
   }, [sleepLogs, range]);
@@ -154,7 +164,8 @@ export default function SleepStatistics() {
           ) : (
             <View style={styles.chartArea}>
               {[10, 8, 6, 4, 2, 0].map((tick) => (
-                <View key={tick} style={[styles.gridRow, { bottom: (tick / MAX_HOURS) * 140 + 24 }]}>
+                // +35 clears the two label lines beneath each bar.
+                <View key={tick} style={[styles.gridRow, { bottom: (tick / MAX_HOURS) * 140 + 35 }]}>
                   <Text style={styles.gridLabel}>{tick}</Text>
                   <View style={styles.gridLine} />
                 </View>
@@ -166,10 +177,15 @@ export default function SleepStatistics() {
                     <View
                       style={[
                         styles.chartBar,
-                        { height: Math.min(d.value / MAX_HOURS, 1) * 140 },
+                        {
+                          height: Math.min(d.value / MAX_HOURS, 1) * 140,
+                          // 12 monthly bars won't fit at the weekly width.
+                          width: chart.length > 7 ? 10 : 18,
+                        },
                       ]}
                     />
                     <Text style={styles.chartLabel}>{d.label}</Text>
+                    <Text style={styles.chartSub}>{d.sub}</Text>
                   </View>
                 ))}
               </View>
@@ -180,12 +196,11 @@ export default function SleepStatistics() {
             <Text style={styles.empty}>No sleep logged yet.</Text>
           )}
 
-          {/* The chart only has room for a week, so say so rather than
-              letting a "Past Year" label sit over seven bars. */}
+          {/* Says what a bar is, since it stops being one night. */}
           {range.days > 7 && sleepLogs.length > 0 && (
             <Text style={styles.chartNote}>
-              Showing the most recent 7 nights; the average above covers
-              {' '}{sleepLogs.length} night(s).
+              Each bar is the average of the nights logged in that
+              {range.days > 92 ? ' month' : ' week'}.
             </Text>
           )}
         </View>
@@ -290,7 +305,7 @@ const styles = StyleSheet.create({
 
   avgLine: { color: '#48DDB0', fontSize: 10, marginBottom: 2 },
 
-  chartArea: { position: 'relative', height: 180, marginTop: 12 },
+  chartArea: { position: 'relative', height: 192, marginTop: 12 },
 
   gridRow: {
     position: 'absolute',
@@ -308,15 +323,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     justifyContent: 'space-around',
-    height: 170,
+    height: 182,
     paddingLeft: 22,
   },
 
   chartColumn: { alignItems: 'center' },
 
-  chartBar: { width: 18, backgroundColor: '#4ECBA0', borderRadius: 9 },
+  chartBar: { backgroundColor: '#4ECBA0', borderRadius: 9 },
 
   chartLabel: { color: '#60766E', fontSize: 10, marginTop: 8 },
+
+  // The date or year beneath the label, dimmer so the label reads first.
+  chartSub: { color: '#3A5049', fontSize: 8, marginTop: 1 },
 
   empty: {
     color: '#60766E',

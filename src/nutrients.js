@@ -23,8 +23,6 @@ const DEFS = [
   { id: 'saturated_fat',  key: 'saturated_fat_g',     label: 'Saturated Fat',  unit: 'g',  type: 'limit' },
   { id: 'sugar',          key: 'sugar_g',             label: 'Sugar',          unit: 'g',  type: 'limit' },
   { id: 'sodium',         key: 'sodium_mg',           label: 'Sodium',         unit: 'mg', type: 'limit' },
-  { id: 'vegetables',     key: 'vegetable_servings',  label: 'Vegetables',     unit: 'servings', type: 'goal' },
-  { id: 'water',          key: 'water_ml',            label: 'Water',          unit: 'ml', type: 'goal'  },
 ];
 
 /**
@@ -48,8 +46,6 @@ export function targetsFor(profile) {
     saturated_fat_g: Math.round((calories * 0.1) / 9),
     sugar_g: goals.sugar_g ?? 50,
     sodium_mg: goals.sodium_mg ?? 2000,
-    vegetable_servings: 5,
-    water_ml: 2000,
   };
 }
 

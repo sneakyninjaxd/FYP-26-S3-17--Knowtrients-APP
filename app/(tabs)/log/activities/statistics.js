@@ -1,7 +1,7 @@
 import { useActivities } from '@/contexts/activity-context';
 import { useSubscription } from '@/contexts/subscription-context';
 import { initHealth, readRange } from '@/src/health';
-import { RANGES } from '@/src/ranges';
+import { bucketsFor, RANGES } from '@/src/ranges';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
@@ -19,8 +19,6 @@ import Svg, { Circle } from 'react-native-svg';
 /** Must match the daily screen, or the two disagree about the same day. */
 const GOALS = { steps: 10000, calories: 2200, activeTime: 90 };
 
-/** The chart only has room for this many bars, whatever the range. */
-const MAX_BARS = 7;
 const CHART_HEIGHT = 150;
 
 /** Everything is scaled to a percentage of its goal so the series stack. */
@@ -157,19 +155,35 @@ export default function ActivityStatistics() {
    * minutes and kcal don't share a scale.
    */
   const chart = useMemo(() => {
-    const recent = rows.slice(-MAX_BARS);
-    const recentHealth = healthRows?.slice(-MAX_BARS) ?? [];
+    // Device rows line up with API rows by position, so pair them by date.
+    const stepsByDate = new Map();
+    const deviceCalsByDate = new Map();
+    rows.forEach((r, i) => {
+      stepsByDate.set(r.date, healthRows?.[i]?.steps ?? 0);
+      deviceCalsByDate.set(r.date, healthRows?.[i]?.calories ?? 0);
+    });
 
-    return recent.map((r, i) => {
-      const d = new Date(r.date);
+    const byDate = new Map(rows.map((r) => [r.date, r]));
+
+    return bucketsFor(range.days).map((bucket) => {
+      // Only days that exist in the fetched range contribute.
+      const days = bucket.keys.filter((k) => byDate.has(k));
+      const n = days.length || 1;
+
+      const sum = (fn) => days.reduce((acc, k) => acc + fn(k), 0);
+
       return {
-        label: d.toLocaleDateString('en-GB', { weekday: 'short' }),
-        steps: pct(recentHealth[i]?.steps ?? 0, GOALS.steps),
-        calories: pct((recentHealth[i]?.calories ?? 0) + r.calories, GOALS.calories),
-        activeTime: pct(r.minutes, GOALS.activeTime),
+        label: bucket.label,
+        sub: bucket.sub,
+        steps: pct(sum((k) => stepsByDate.get(k) ?? 0) / n, GOALS.steps),
+        calories: pct(
+          sum((k) => (deviceCalsByDate.get(k) ?? 0) + (byDate.get(k)?.calories ?? 0)) / n,
+          GOALS.calories
+        ),
+        activeTime: pct(sum((k) => byDate.get(k)?.minutes ?? 0) / n, GOALS.activeTime),
       };
     });
-  }, [rows, healthRows]);
+  }, [rows, healthRows, range]);
 
   const activeDays = rows.filter((r) => r.count > 0).length;
 
@@ -272,7 +286,8 @@ export default function ActivityStatistics() {
               {[250, 200, 150, 100, 50, 0].map((tick) => (
                 <View
                   key={tick}
-                  style={[styles.gridRow, { bottom: (tick / MAX) * CHART_HEIGHT + 24 }]}
+                  // +35 clears the two label lines beneath each bar.
+                  style={[styles.gridRow, { bottom: (tick / MAX) * CHART_HEIGHT + 35 }]}
                 >
                   <Text style={styles.gridLabel}>{tick}</Text>
                   <View style={styles.gridLine} />
@@ -289,22 +304,24 @@ export default function ActivityStatistics() {
                           style={{
                             height: (d[s.key] / MAX) * CHART_HEIGHT,
                             backgroundColor: s.color,
-                            width: 16,
+                            // 12 monthly bars won't fit at the weekly width.
+                            width: chart.length > 7 ? 10 : 16,
                           }}
                         />
                       ))}
                     </View>
                     <Text style={styles.chartLabel}>{d.label}</Text>
+                    <Text style={styles.chartSub}>{d.sub}</Text>
                   </View>
                 ))}
               </View>
             </View>
           )}
 
-          {range.days > MAX_BARS && (
+          {range.days > 7 && (
             <Text style={styles.chartNote}>
-              Showing the most recent {MAX_BARS} days; the averages above cover
-              the last {rows.length} day(s).
+              Each bar is the daily average for that
+              {range.days > 92 ? ' month' : ' week'}.
             </Text>
           )}
         </View>
@@ -436,7 +453,7 @@ const styles = StyleSheet.create({
   legendDot: { width: 6, height: 6, borderRadius: 3 },
   legendText: { color: '#D4E6DF', fontSize: 8 },
 
-  chartArea: { position: 'relative', height: 190 },
+  chartArea: { position: 'relative', height: 201 },
 
   gridRow: {
     position: 'absolute',
@@ -454,7 +471,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     justifyContent: 'space-around',
-    height: 180,
+    height: 191,
     paddingLeft: 26,
   },
 
@@ -463,6 +480,9 @@ const styles = StyleSheet.create({
   stack: { flexDirection: 'column-reverse' },
 
   chartLabel: { color: '#60766E', fontSize: 9, marginTop: 8 },
+
+  // The date or year beneath the label, dimmer so the label reads first.
+  chartSub: { color: '#3A5049', fontSize: 8, marginTop: 1 },
 
   chartNote: { color: '#60766E', fontSize: 8, textAlign: 'center', marginTop: 10 },
 });
