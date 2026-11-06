@@ -784,6 +784,20 @@ export const api = {
       headers: authHeaders(token),
     }),
 
+  /**
+   * Permanently deletes the signed-in user's account and everything belonging
+   * to it. Irreversible — there's no soft delete or recovery period.
+   *
+   * POST rather than DELETE because the request carries the password, and
+   * some networks drop the body of a DELETE.
+   */
+  deleteAccount: (token: string, password: string) =>
+    request<void>('/me/delete', {
+      method: 'POST',
+      headers: authHeaders(token),
+      body: JSON.stringify({ password }),
+    }),
+
   // -------------------------------------------------------------------------
   // Subscription
   // -------------------------------------------------------------------------

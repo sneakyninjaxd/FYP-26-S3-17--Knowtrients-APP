@@ -122,6 +122,15 @@ export default function SupportThread() {
   const messages = thread?.messages ?? [];
   const isResolved = request?.status === 'resolved';
 
+  /**
+   * The API stores the original request as the first message of the thread,
+   * so drawing `request.body` as its own bubble as well showed it twice.
+   * Only draw it when the thread doesn't already open with it.
+   */
+  const showRequestBubble =
+    !!request &&
+    !(messages[0]?.is_mine && messages[0]?.body?.trim() === request.body?.trim());
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <KeyboardAvoidingView
@@ -144,7 +153,12 @@ export default function SupportThread() {
         <View style={styles.divider} />
 
         <View style={styles.titleRow}>
-          <TouchableOpacity onPress={() => router.back()} hitSlop={10}>
+          {/* A thread can be opened from more than one place, so go to a
+              known screen rather than wherever the stack happens to point. */}
+          <TouchableOpacity
+            onPress={() => router.replace('/account/account')}
+            hitSlop={10}
+          >
             <Ionicons name="chevron-back" size={24} color="#48DDB0" />
           </TouchableOpacity>
 
@@ -184,8 +198,9 @@ export default function SupportThread() {
               />
             }
           >
-            {/* The original request reads as the first message in the thread. */}
-            {request && (
+            {/* The original request reads as the first message in the thread,
+                unless the API already returned it as one. */}
+            {showRequestBubble && (
               <View style={[styles.bubble, styles.bubbleMine]}>
                 <Text style={styles.bubbleText}>{request.body}</Text>
                 <Text style={styles.bubbleTimeMine}>
@@ -211,7 +226,10 @@ export default function SupportThread() {
               </View>
             ))}
 
-            {messages.length === 0 && (
+            {/* "No reply yet" means no reply from support — the user's own
+                messages don't count, or it would vanish the moment they wrote
+                a second line to themselves. */}
+            {!messages.some((m) => !m.is_mine) && (
               <Text style={styles.empty}>
                 No reply yet. We&apos;ll get back to you as soon as we can —
                 pull down to check for one.

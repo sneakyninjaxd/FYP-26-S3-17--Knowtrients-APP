@@ -1,5 +1,5 @@
 import { useActivities } from '@/contexts/activity-context';
-import { useProfile } from '@/contexts/profile-context';
+import { useSubscription } from '@/contexts/subscription-context';
 import { initHealth, readRange } from '@/src/health';
 import { RANGES } from '@/src/ranges';
 import { Ionicons } from '@expo/vector-icons';
@@ -68,11 +68,10 @@ function Bar({ label, value, goal, unit, color }) {
 }
 
 export default function ActivityStatistics() {
-  const { profile } = useProfile();
   const { loadRange } = useActivities();
 
-  // `plan` is client-side only — there's no subscription column yet.
-  const isPremium = profile?.plan === 'premium';
+  // Read from the subscriptions table rather than a client-side flag.
+  const { isPremium } = useSubscription();
 
   const available = useMemo(
     () => RANGES.filter((r) => !r.premium || isPremium),
@@ -89,11 +88,15 @@ export default function ActivityStatistics() {
   const fetchRange = useCallback(
     async (r) => {
       setIsLoading(true);
+
+      // Both endpoints accept up to 365 days, so the range is fetched whole.
+      const days = r.days;
+
       try {
         const [apiRows, hcRows] = await Promise.all([
-          loadRange(r.days),
+          loadRange(days),
           (async () =>
-            (await initHealth()) === 'ready' ? readRange(r.days) : null)(),
+            (await initHealth()) === 'ready' ? readRange(days) : null)(),
         ]);
         setRows(apiRows);
         setHealthRows(hcRows);
@@ -300,7 +303,8 @@ export default function ActivityStatistics() {
 
           {range.days > MAX_BARS && (
             <Text style={styles.chartNote}>
-              Showing the most recent {MAX_BARS} days; the averages above cover the full range.
+              Showing the most recent {MAX_BARS} days; the averages above cover
+              the last {rows.length} day(s).
             </Text>
           )}
         </View>

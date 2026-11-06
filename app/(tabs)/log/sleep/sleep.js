@@ -46,7 +46,7 @@ export default function Sleep() {
    */
   const selectDate = (selected) => {
     setDate(selected);
-    loadSleep(Math.min(daysAgo(selected) + 7, 90));
+    loadSleep(Math.min(daysAgo(selected) + 7, 365));
   };
 
   const key = toLogDate(date);
@@ -87,7 +87,6 @@ export default function Sleep() {
           </TouchableOpacity>
         </View>
         <View style={styles.divider} />
-        <View style={styles.divider} />
 
         <View style={styles.titleRow}>
           <View>
@@ -119,10 +118,20 @@ export default function Sleep() {
         {/* Selected day's sleep card */}
         <View style={styles.sleepCard}>
           <View style={styles.sleepCardTop}>
-            <Text style={styles.sleepCardTitle}>Today&apos;s Sleep</Text>
+            {/* Says which night, since the calendar can move off today. */}
+            <Text style={styles.sleepCardTitle}>
+              {key === toLogDate() ? "Today's Sleep" : 'Sleep that night'}
+            </Text>
             <TouchableOpacity
               style={styles.addButton}
-              onPress={() => router.push('/log/sleep/addsleep')}
+              onPress={() =>
+                // Carry the viewed date across, so adding from an older day
+                // fills in that night rather than today.
+                router.push({
+                  pathname: '/log/sleep/addsleep',
+                  params: { date: toLogDate(date) },
+                })
+              }
             >
               <Text style={styles.addButtonText}>Add Sleep Data</Text>
             </TouchableOpacity>
@@ -208,6 +217,7 @@ const styles = StyleSheet.create({
   logo: { color: '#fff', fontSize: 19, fontWeight: '600' },
 
   divider: { height: 1, backgroundColor: '#123B2F' },
+
   titleRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',

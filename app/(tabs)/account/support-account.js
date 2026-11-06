@@ -36,7 +36,6 @@ export default function AccountSupport() {
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
-  const [sent, setSent] = useState(null);
 
   // The API needs a body of at least 3 characters.
   const canSubmit = issue !== null && description.trim().length >= 3;
@@ -49,12 +48,27 @@ export default function AccountSupport() {
     setSubmitting(true);
     setError(null);
     try {
-      const created = await api.createSupportRequest(token, {
+      await api.createSupportRequest(token, {
         category: issue,
         subject: selectedLabel ?? 'Account support',
         body: description.trim(),
       });
-      setSent(created.display_id ?? `#${created.id}`);
+
+      /**
+       * Reset before leaving. Returning to this route can reuse the mounted
+       * screen, which would otherwise show the request that was just sent
+       * still sitting in the form.
+       */
+      setIssue(null);
+      setShowIssues(false);
+      setDescription('');
+
+      /**
+       * Straight back to Help Support rather than a confirmation card — the
+       * request now appears in Previous Requests, which is better proof it
+       * was received than a screen saying so.
+       */
+      router.back();
     } catch (err) {
       setError(err?.message ?? 'Could not send your request. Please try again.');
     } finally {
@@ -93,25 +107,7 @@ export default function AccountSupport() {
             Account deactivation etc.)
           </Text>
 
-          {sent ? (
-            <View style={styles.sentCard}>
-              <Ionicons name="checkmark-circle" size={28} color="#4ECBA0" />
-              <Text style={styles.sentTitle}>Request sent</Text>
-              <Text style={styles.sentBody}>
-                Your reference is {sent}. We&apos;ll get back to you as soon as
-                we can — you can check for a reply under Previous Requests.
-              </Text>
-
-              <TouchableOpacity
-                style={styles.submitButton}
-                onPress={() => router.back()}
-              >
-                <Text style={styles.submitText}>Back to Help Support</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <>
-              <Text style={styles.label}>
+          <Text style={styles.label}>
                 Let us know what issues you are currently facing...
               </Text>
 
@@ -185,8 +181,6 @@ export default function AccountSupport() {
                   </Text>
                 </TouchableOpacity>
               </View>
-            </>
-          )}
 
         </ScrollView>
       </KeyboardAvoidingView>
@@ -316,29 +310,4 @@ const styles = StyleSheet.create({
   submitText: { color: '#00382B', fontSize: 14, fontWeight: '600' },
   submitTextDisabled: { color: '#3A5049', fontSize: 14, fontWeight: '600' },
 
-  sentCard: {
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#123B2F',
-    borderRadius: 14,
-    padding: 24,
-    marginHorizontal: 25,
-    marginTop: 20,
-  },
-
-  sentTitle: {
-    color: '#fff',
-    fontSize: 16,
-    fontFamily: 'serif',
-    marginTop: 10,
-  },
-
-  sentBody: {
-    color: '#60766E',
-    fontSize: 11,
-    lineHeight: 16,
-    textAlign: 'center',
-    marginTop: 8,
-    marginBottom: 20,
-  },
 });

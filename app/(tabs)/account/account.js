@@ -1,8 +1,10 @@
 import { useAuth } from '@/contexts/auth-context';
+import { api } from '@/services/api';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import {
+  ActivityIndicator,
   Modal,
   ScrollView,
   StyleSheet,
@@ -22,11 +24,17 @@ const REASONS = [
 
 export default function Account() {
   const insets = useSafeAreaInsets();
-  const { logOut } = useAuth();
+  const { token, logOut } = useAuth();
 
   const [showDelete, setShowDelete] = useState(false);
   const [reasons, setReasons] = useState([]);
   const [otherReason, setOtherReason] = useState('');
+
+  // The endpoint requires the password — a session left open on a shared
+  // phone shouldn't be enough to destroy the account.
+  const [password, setPassword] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState(null);
 
   const toggleReason = (item) => {
     setReasons((prev) =>
@@ -43,6 +51,44 @@ export default function Account() {
   const handleLogOut = async () => {
     await logOut();
     router.replace('/login');
+  };
+
+  const closeDelete = () => {
+    setShowDelete(false);
+    setPassword('');
+    setDeleteError(null);
+  };
+
+  /**
+   * Deletes the account, then signs out. The sign-out matters: the token is
+   * still in storage and every request with it would now 401, so the app
+   * would sit on a logged-in shell with nothing behind it.
+   *
+   * The reasons collected above aren't sent anywhere — there's no endpoint
+   * for them. They're exit-survey data the backend would need a table for.
+   */
+  const handleDelete = async () => {
+    if (!token || deleting) return;
+
+    if (!password) {
+      setDeleteError('Enter your password to confirm.');
+      return;
+    }
+
+    setDeleting(true);
+    setDeleteError(null);
+
+    try {
+      await api.deleteAccount(token, password);
+      await logOut();
+      router.replace('/login');
+    } catch (err) {
+      setDeleteError(
+        err?.message ?? 'Could not delete your account. Check your password.'
+      );
+    } finally {
+      setDeleting(false);
+    }
   };
 
   return (
@@ -144,16 +190,40 @@ export default function Account() {
               ACTION IS NOT REVERSIBLE.
             </Text>
 
+            <Text style={styles.passwordLabel}>
+              Enter your password to confirm
+            </Text>
+            <TextInput
+              style={styles.reasonInput}
+              placeholder="Password"
+              placeholderTextColor="#60766E"
+              secureTextEntry
+              autoCapitalize="none"
+              value={password}
+              onChangeText={setPassword}
+            />
+
+            {deleteError && <Text style={styles.deleteError}>{deleteError}</Text>}
+
             <View style={styles.modalButtons}>
               <TouchableOpacity
                 style={styles.cancelButton}
-                onPress={() => setShowDelete(false)}
+                onPress={closeDelete}
+                disabled={deleting}
               >
                 <Text style={styles.cancelText}>Cancel</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.deleteButton}>
-                <Text style={styles.deleteText}>Delete Account</Text>
+              <TouchableOpacity
+                style={[styles.deleteButton, deleting && styles.deleteButtonBusy]}
+                onPress={handleDelete}
+                disabled={deleting}
+              >
+                {deleting ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.deleteText}>Delete Account</Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>
@@ -304,4 +374,19 @@ const styles = StyleSheet.create({
   },
 
   deleteText: { color: '#fff', fontSize: 14, fontWeight: '600' },
+
+  deleteButtonBusy: { opacity: 0.7 },
+
+  passwordLabel: {
+    color: '#D4E6DF',
+    fontSize: 11,
+    marginTop: 14,
+    marginBottom: 6,
+  },
+
+  deleteError: {
+    color: '#E07A5F',
+    fontSize: 11,
+    marginTop: 10,
+  },
 });
