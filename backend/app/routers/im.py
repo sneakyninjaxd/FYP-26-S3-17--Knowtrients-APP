@@ -57,7 +57,7 @@ def _rate(up: int, down: int) -> float | None:
 
 @router.get("/analytics")
 def analytics(
-    days: int = Query(default=14, ge=1, le=90),
+    days: int = Query(default=14, ge=1, le=365),
     db: Session = Depends(get_db),
     _: models.User = Depends(get_current_platform_admin),
 ):

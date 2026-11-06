@@ -198,3 +198,38 @@ def change_password(
 
     current_user.hashed_password = auth.hash_password(payload.new_password)
     db.commit()
+
+
+@router.post("/me/delete", status_code=status.HTTP_204_NO_CONTENT)
+def delete_own_account(
+    payload: schemas.DeleteOwnAccount,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Permanently deletes the signed-in user's account and everything belonging
+    to it: profile, food, water, sleep and activity logs, steps,
+    recommendations and their history, ratings, satisfaction check-ins,
+    subscription, and support requests with their messages. The user's right
+    to erasure under the PDPA (constraint C-08).
+
+    POST rather than DELETE because the request carries the password, and some
+    networks drop the body of a DELETE request.
+
+    App users only. Administrators are removed by another Account
+    Administrator, as before — otherwise the last Account Administrator could
+    delete themselves and leave nobody able to manage accounts.
+
+    Irreversible: there is no soft delete or recovery period.
+    """
+    if not auth.verify_password(payload.password, current_user.hashed_password):
+        raise HTTPException(status_code=400, detail="Password is incorrect.")
+
+    if current_user.is_admin:
+        raise HTTPException(
+            status_code=403,
+            detail="Administrator accounts are deleted by an Account Administrator.",
+        )
+
+    db.delete(current_user)
+    db.commit()

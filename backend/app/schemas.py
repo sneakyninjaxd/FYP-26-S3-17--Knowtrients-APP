@@ -854,3 +854,12 @@ class ChangePassword(BaseModel):
         if info.data.get("current_password") == v:
             raise ValueError("New password must be different from your current password.")
         return v
+
+
+class DeleteOwnAccount(BaseModel):
+    """
+    Confirms a user deleting their own account. The current password is
+    required so an unlocked phone can't be used to wipe someone's account.
+    """
+
+    password: str = Field(min_length=1)
