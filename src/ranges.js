@@ -3,3 +3,4 @@ export const RANGES = [
   { id: 'month', label: 'Over past month', days: 30,  premium: true },
   { id: 'year',  label: 'Over past year',  days: 365, premium: true },
 ];
+export const MAX_API_DAYS = 365;

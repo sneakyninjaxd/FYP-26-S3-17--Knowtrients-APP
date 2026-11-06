@@ -1,7 +1,7 @@
 import { useSleep } from '@/contexts/sleep-context';
 import { toLogDate } from '@/services/api';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import {
   ScrollView,
@@ -54,8 +54,25 @@ function TimeColumn({ values, selected, onSelect }) {
   );
 }
 
+/** Parses a YYYY-MM-DD param without the UTC shift toISOString would add. */
+const parseLogDate = (value) => {
+  if (typeof value !== 'string') return null;
+  const [y, m, d] = value.split('-').map(Number);
+  if (!y || !m || !d) return null;
+  const parsed = new Date(y, m - 1, d);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
 export default function AddSleep() {
   const { addSleep } = useSleep();
+
+  /**
+   * The date this sleep belongs to — the wake date, so last night's sleep
+   * sits on today's dashboard. Defaults to today, or to whichever day the
+   * sleep screen was showing when it sent us here.
+   */
+  const { date: dateParam } = useLocalSearchParams();
+  const date = parseLogDate(dateParam) ?? new Date();
 
   const [sleep, setSleep] = useState({ hour: 11, minute: '00', period: 'pm' });
   const [wake, setWake] = useState({ hour: 7, minute: '00', period: 'am' });
@@ -84,14 +101,14 @@ export default function AddSleep() {
   /**
    * The API takes a single decimal `hours`, not an h/m pair, so the total
    * minutes are converted here. log_date is the wake date — last night's
-   * sleep belongs to today's dashboard.
+   * sleep belongs to that morning's dashboard.
    */
   const handleAdd = async () => {
     if (saving) return;
     setSaving(true);
     try {
       const saved = await addSleep({
-        date: toLogDate(),
+        date: toLogDate(date),
         hours: Math.round((total / 60) * 100) / 100,
         bedtime: pad(sleep),
         wake_time: pad(wake),
@@ -128,7 +145,22 @@ export default function AddSleep() {
         <View style={styles.divider} />
 
         <Text style={styles.title}>Add Sleep Data</Text>
-        <Text style={styles.subtitle}>Insert your sleep data for today</Text>
+        <Text style={styles.subtitle}>
+          Which morning did you wake up? Nights are stored against the day you
+          woke, so last night belongs to today.
+        </Text>
+
+        {/* Which night this is for. Chosen with the calendar on My Sleep —
+            one place to pick the day, rather than two that can disagree. */}
+        <Text style={styles.label}>Date</Text>
+        <View style={styles.dateBox}>
+          <Text style={styles.dateText}>
+            {date.toLocaleDateString('en-GB', {
+              weekday: 'long', day: 'numeric', month: 'long',
+            })}
+          </Text>
+          <Ionicons name="calendar-outline" size={18} color="#3A5049" />
+        </View>
 
         {/* Time summary */}
         <View style={styles.timeRow}>
@@ -259,6 +291,21 @@ const styles = StyleSheet.create({
   },
 
   optional: { color: '#60766E', fontSize: 9 },
+
+  dateBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: '#123B2F',
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginHorizontal: 25,
+    marginBottom: 20,
+  },
+
+  dateText: { color: '#fff', fontSize: 13 },
 
   timeRow: {
     flexDirection: 'row',

@@ -1,5 +1,5 @@
-import { useProfile } from '@/contexts/profile-context';
 import { useSleep } from '@/contexts/sleep-context';
+import { useSubscription } from '@/contexts/subscription-context';
 import { RANGES } from '@/src/ranges';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -26,10 +26,9 @@ const timeToMinutes = (value) => {
 
 export default function SleepStatistics() {
   const { sleepLogs, isLoading, loadSleep } = useSleep();
-  const { profile } = useProfile();
 
-  // `plan` is client-side only — there's no subscription column yet.
-  const isPremium = profile?.plan === 'premium';
+  // Read from the subscriptions table rather than a client-side flag.
+  const { isPremium } = useSubscription();
 
   const available = useMemo(
     () => RANGES.filter((r) => !r.premium || isPremium),
@@ -39,11 +38,11 @@ export default function SleepStatistics() {
   const [range, setRange] = useState(available[0]);
   const [showRange, setShowRange] = useState(false);
 
-  /** Changing the range refetches — the server caps `days` at 90. */
+  /** Changing the range refetches — the server accepts up to 365 days. */
   const selectRange = (r) => {
     setRange(r);
     setShowRange(false);
-    loadSleep(Math.min(r.days, 90));
+    loadSleep(r.days);
   };
 
   // average duration; `hours` is a single decimal, not an h/m pair
@@ -180,6 +179,15 @@ export default function SleepStatistics() {
           {!isLoading && sleepLogs.length === 0 && (
             <Text style={styles.empty}>No sleep logged yet.</Text>
           )}
+
+          {/* The chart only has room for a week, so say so rather than
+              letting a "Past Year" label sit over seven bars. */}
+          {range.days > 7 && sleepLogs.length > 0 && (
+            <Text style={styles.chartNote}>
+              Showing the most recent 7 nights; the average above covers
+              {' '}{sleepLogs.length} night(s).
+            </Text>
+          )}
         </View>
 
       </ScrollView>
@@ -315,5 +323,12 @@ const styles = StyleSheet.create({
     fontSize: 11,
     textAlign: 'center',
     marginVertical: 30,
+  },
+
+  chartNote: {
+    color: '#60766E',
+    fontSize: 8,
+    textAlign: 'center',
+    marginTop: 10,
   },
 });

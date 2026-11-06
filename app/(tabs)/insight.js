@@ -73,7 +73,6 @@ export default function Insights() {
   const [sleepError, setSleepError] = useState(null);
 
   const [selected, setSelected] = useState(null);
-  const [mode, setMode] = useState('simple');
 
   // Feedback state
   const [feedback, setFeedback] = useState({});
@@ -169,10 +168,7 @@ export default function Insights() {
     }, [loadRecommendation])
   );
 
-  const openInsight = (insight) => {
-    setMode('simple');
-    setSelected(insight);
-  };
+  const openInsight = (insight) => setSelected(insight);
 
   /**
    * A rating can only be stored against a real recommendation, so the test
@@ -346,6 +342,7 @@ export default function Insights() {
           <View>
             <Text style={styles.title}>Insights</Text>
 
+
             <Text style={styles.date}>
               {new Date().toLocaleDateString('en-GB', {
                 weekday: 'long',
@@ -359,20 +356,6 @@ export default function Insights() {
               })}
             </Text>
           </View>
-
-          <TouchableOpacity
-            style={isPremium ? styles.refreshButton : styles.refreshDisabled}
-            disabled={!isPremium || isLoading}
-            onPress={loadRecommendation}
-          >
-            {!isPremium && (
-              <Ionicons name="lock-closed" size={11} color="#3A5049" />
-            )}
-
-            <Text style={isPremium ? styles.refreshText : styles.refreshTextDisabled}>
-              Refresh Insight
-            </Text>
-          </TouchableOpacity>
         </View>
 
         {/* =====================================================
@@ -470,18 +453,6 @@ export default function Insights() {
                   <Text style={styles.modalAspect}>{selected.aspect}</Text>
 
                   <View style={styles.headerRight}>
-                    {isPremium && (
-                      <View style={styles.modeToggle}>
-                        {['simple', 'technical'].map((m) => (
-                          <TouchableOpacity key={m} onPress={() => setMode(m)}>
-                            <Text style={mode === m ? styles.modeActive : styles.mode}>
-                              {m === 'simple' ? 'Simple' : 'Technical'}
-                            </Text>
-                          </TouchableOpacity>
-                        ))}
-                      </View>
-                    )}
-
                     <Text style={styles.confidence}>
                       Confidence: {Math.round(activeRec.confidence * 100)}%
                     </Text>
@@ -518,8 +489,20 @@ export default function Insights() {
                 <Text style={styles.modalLabel}>Reasoning</Text>
                 <View style={styles.rule} />
 
-                {mode === 'technical' && isPremium ? (
+                {(activeRec.explanation ?? []).map((step, i) => (
+                  <Text key={i} style={styles.modalBody}>
+                    {i + 1}. {step}
+                  </Text>
+                ))}
+
+                {/* The SHAP breakdown sits under the plain-language reasoning
+                    rather than replacing it, so a premium user reads what the
+                    model concluded and then how each value contributed. */}
+                {isPremium && factors.length > 0 && (
                   <>
+                    <Text style={styles.modalLabel}>How each value contributed</Text>
+                    <View style={styles.rule} />
+
                     <Text style={styles.modalNote}>
                       Each bar shows how much that value pushed the model toward
                       or away from this recommendation.
@@ -556,12 +539,6 @@ export default function Insights() {
                       );
                     })}
                   </>
-                ) : (
-                  (activeRec.explanation ?? []).map((step, i) => (
-                    <Text key={i} style={styles.modalBody}>
-                      {i + 1}. {step}
-                    </Text>
-                  ))
                 )}
 
                 {/* RECOMMENDATION */}
@@ -578,11 +555,12 @@ export default function Insights() {
                   </>
                 ) : null}
 
-                {/* ALTERNATIVE */}
+                {/* ALTERNATIVE — the runner-up prediction, without its own
+                    confidence figure: two percentages side by side read as a
+                    comparison the user is meant to make, which isn't the point. */}
                 {activeRec.alternative && (
                   <Text style={styles.modalFooter}>
-                    Alternative: {activeRec.alternative.recommendation} (
-                    {Math.round(activeRec.alternative.confidence * 100)}% confidence)
+                    Alternative: {activeRec.alternative.recommendation}
                   </Text>
                 )}
 
@@ -812,35 +790,6 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 
-  refreshButton: {
-    backgroundColor: '#48DDB0',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-  },
-
-  refreshDisabled: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    backgroundColor: '#123B2F',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-  },
-
-  refreshText: {
-    color: '#00382B',
-    fontSize: 11,
-    fontWeight: '600',
-  },
-
-  refreshTextDisabled: {
-    color: '#3A5049',
-    fontSize: 11,
-    fontWeight: '600',
-  },
-
   /* =========================================================
      CARDS
   ========================================================= */
@@ -961,22 +910,6 @@ const styles = StyleSheet.create({
   headerRight: {
     alignItems: 'flex-end',
     gap: 4,
-  },
-
-  modeToggle: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-
-  mode: {
-    color: '#3A5049',
-    fontSize: 9,
-  },
-
-  modeActive: {
-    color: '#48DDB0',
-    fontSize: 9,
-    fontWeight: '600',
   },
 
   confidence: {

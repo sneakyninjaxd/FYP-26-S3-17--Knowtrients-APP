@@ -20,7 +20,6 @@ const PLANS = [
     name: 'Free Plan',
     price: null,
     features: [
-      '1 recommendation per day',
       'View progress history for the last 7 days',
       'View regular progress charts',
       'Manual sleep input',
@@ -31,10 +30,8 @@ const PLANS = [
     name: 'Premium Plan',
     price: '$10/month',
     features: [
-      'Unlimited recommendations',
       'View full progress history',
       'View advanced progress charts',
-      'Automatic sleep tracking',
       'Generate formatted health report',
     ],
   },

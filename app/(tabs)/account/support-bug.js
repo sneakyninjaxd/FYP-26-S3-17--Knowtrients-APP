@@ -39,7 +39,6 @@ export default function ReportBug() {
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
-  const [sent, setSent] = useState(null);
 
   // The API needs a body of at least 3 characters.
   const canSubmit =
@@ -57,13 +56,25 @@ export default function ReportBug() {
     setSubmitting(true);
     setError(null);
     try {
-      const created = await api.createSupportRequest(token, {
+      await api.createSupportRequest(token, {
         category: area,
         subject: `Bug — ${selectedLabel ?? 'Somewhere else'}`,
         body: description.trim(),
         is_persisting: persisting,
       });
-      setSent(created.display_id ?? `#${created.id}`);
+
+      /**
+       * Reset before leaving. Returning to this route can reuse the mounted
+       * screen, which would otherwise show the report that was just sent
+       * still sitting in the form.
+       */
+      setArea(null);
+      setShowAreas(false);
+      setPersisting(null);
+      setDescription('');
+
+      // Back to Help Support — the report now shows under Previous Requests.
+      router.back();
     } catch (err) {
       setError(err?.message ?? 'Could not send your report. Please try again.');
     } finally {
@@ -102,25 +113,7 @@ export default function ReportBug() {
             encountered (e.g. Page Loading Error, Inaccurate AI model etc.)
           </Text>
 
-          {sent ? (
-            <View style={styles.sentCard}>
-              <Ionicons name="checkmark-circle" size={28} color="#4ECBA0" />
-              <Text style={styles.sentTitle}>Report sent</Text>
-              <Text style={styles.sentBody}>
-                Your reference is {sent}. Thanks — this helps us fix things
-                faster. You can check for a reply under Previous Requests.
-              </Text>
-
-              <TouchableOpacity
-                style={styles.submitButton}
-                onPress={() => router.back()}
-              >
-                <Text style={styles.submitText}>Back to Help Support</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <>
-              <Text style={styles.label}>
+          <Text style={styles.label}>
                 Let us know what errors you have encountered...
               </Text>
 
@@ -221,8 +214,6 @@ export default function ReportBug() {
                   </Text>
                 </TouchableOpacity>
               </View>
-            </>
-          )}
 
         </ScrollView>
       </KeyboardAvoidingView>
@@ -381,29 +372,4 @@ const styles = StyleSheet.create({
   submitText: { color: '#00382B', fontSize: 14, fontWeight: '600' },
   submitTextDisabled: { color: '#3A5049', fontSize: 14, fontWeight: '600' },
 
-  sentCard: {
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#123B2F',
-    borderRadius: 14,
-    padding: 24,
-    marginHorizontal: 25,
-    marginTop: 20,
-  },
-
-  sentTitle: {
-    color: '#fff',
-    fontSize: 16,
-    fontFamily: 'serif',
-    marginTop: 10,
-  },
-
-  sentBody: {
-    color: '#60766E',
-    fontSize: 11,
-    lineHeight: 16,
-    textAlign: 'center',
-    marginTop: 8,
-    marginBottom: 20,
-  },
 });
