@@ -147,6 +147,11 @@ export default function MealLog() {
           </TouchableOpacity>
         )}
 
+        {/* Holds the button at the bottom on a short list, and collapses to
+            nothing on a long one — `marginTop: 'auto'` did the first but not
+            the second, so a full list left the button touching Add more. */}
+        <View style={styles.spacer} />
+
         {/* Edit / Save */}
         <TouchableOpacity
           style={styles.submit}
@@ -263,13 +268,15 @@ const styles = StyleSheet.create({
 
   addMoreText: { color: '#48DDB0', fontSize: 12 },
 
+  spacer: { flexGrow: 1 },
+
   submit: {
     backgroundColor: '#4ECBA0',
     borderRadius: 8,
     paddingVertical: 14,
     alignItems: 'center',
     marginHorizontal: 70,
-    marginTop: 'auto',
+    marginTop: 24,
   },
 
   submitText: { color: '#00382B', fontSize: 15, fontWeight: '600' },

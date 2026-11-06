@@ -53,21 +53,26 @@ export default function Sleep() {
   const todayLog = sleepLogs.find((s) => s.log_date === key);
   const duration = todayLog ? splitHours(todayLog.hours) : null;
 
-  // last 7 days ending on the selected date, oldest first
+  /**
+   * The last 7 days ending today, oldest first — fixed, so picking an older
+   * date to fill in a missed night moves the card above without sliding the
+   * chart off the current week.
+   */
   const week = useMemo(
     () =>
       Array.from({ length: 7 }, (_, i) => {
-        const d = new Date(date);
+        const d = new Date();
         d.setDate(d.getDate() - (6 - i));
         const dKey = toLogDate(d);
         const log = sleepLogs.find((s) => s.log_date === dKey);
 
         return {
           label: d.toLocaleDateString('en-GB', { weekday: 'short' }),
+          day: d.getDate(),
           value: log?.hours ?? 0,
         };
       }),
-    [sleepLogs, date]
+    [sleepLogs]
   );
 
   return (
@@ -163,7 +168,9 @@ export default function Sleep() {
 
           <View style={styles.chartArea}>
             {[10, 8, 6, 4, 2, 0].map((tick) => (
-              <View key={tick} style={[styles.gridRow, { bottom: (tick / MAX_HOURS) * 140 + 24 }]}>
+              // +35 clears the weekday and date beneath each bar, so the
+              // gridlines line up with the bar bases rather than the labels.
+              <View key={tick} style={[styles.gridRow, { bottom: (tick / MAX_HOURS) * 140 + 35 }]}>
                 <Text style={styles.gridLabel}>{tick}</Text>
                 <View style={styles.gridLine} />
               </View>
@@ -179,6 +186,7 @@ export default function Sleep() {
                     ]}
                   />
                   <Text style={styles.chartLabel}>{d.label}</Text>
+                  <Text style={styles.chartDay}>{d.day}</Text>
                 </View>
               ))}
             </View>
@@ -283,7 +291,7 @@ const styles = StyleSheet.create({
 
   chartTitle: { color: '#fff', fontSize: 14, marginBottom: 20 },
 
-  chartArea: { position: 'relative', height: 180 },
+  chartArea: { position: 'relative', height: 192 },
 
   gridRow: {
     position: 'absolute',
@@ -301,7 +309,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     justifyContent: 'space-around',
-    height: 170,
+    height: 182,
     paddingLeft: 22,
   },
 
@@ -314,4 +322,7 @@ const styles = StyleSheet.create({
   },
 
   chartLabel: { color: '#60766E', fontSize: 10, marginTop: 8 },
+
+  // Dimmer than the weekday, so the day name still reads first.
+  chartDay: { color: '#3A5049', fontSize: 9, marginTop: 1 },
 });
