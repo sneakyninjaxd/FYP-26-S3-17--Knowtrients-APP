@@ -446,3 +446,163 @@ def platform_satisfaction(
         .all()
     )
     return _summarise(rows)
+
+
+# ---------------------------------------------------------------------------
+# Subscription plans and subscribers
+# ---------------------------------------------------------------------------
+
+
+@router.get("/plans", response_model=list[schemas.PlanResponse])
+def platform_list_plans(
+    db: Session = Depends(get_db),
+    _: models.User = Depends(get_current_platform_manager),
+):
+    """The plans, with who last edited each — for the Subscription Plans page."""
+    from .subscription import list_plans
+
+    return list_plans(db)
+
+
+@router.put("/plans/{plan_key}", response_model=schemas.PlanResponse)
+def update_plan(
+    plan_key: str,
+    payload: schemas.PlanUpdate,
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(get_current_platform_manager),
+):
+    """
+    Edits a plan's display name, price, billing period or features.
+
+    Plans can be edited but not added or removed: the app's features are
+    built around exactly two plans, checked by key. The free plan's price is
+    fixed at zero. A new premium price applies to future upgrades only —
+    existing subscribers keep the price recorded when they signed up.
+    """
+    import json
+
+    from .subscription import load_plan, plan_response
+
+    plan = load_plan(db, plan_key)
+    if plan is None:
+        raise HTTPException(status_code=404, detail="No plan with that key.")
+
+    if payload.price is not None and plan_key == "free" and payload.price != 0:
+        raise HTTPException(status_code=400, detail="The free plan's price must stay at 0.")
+
+    if payload.name is not None:
+        plan.name = payload.name
+    if payload.price is not None:
+        plan.price = payload.price
+    if payload.billing_period_days is not None:
+        plan.billing_period_days = payload.billing_period_days
+    if payload.features is not None:
+        plan.features = json.dumps(payload.features)
+
+    plan.updated_by_id = current_admin.id
+    plan.updated_at = models.utcnow()
+    db.commit()
+    db.refresh(plan)
+    return plan_response(plan)
+
+
+@router.get("/subscriptions", response_model=schemas.SubscriptionOverview)
+def subscription_overview(
+    db: Session = Depends(get_db),
+    _: models.User = Depends(get_current_platform_manager),
+):
+    """
+    How the plans are doing: subscriber counts, sign-ups and cancellations in
+    the last 30 days, an estimated monthly revenue, and the subscriber list.
+
+    Revenue is an estimate from simulated subscriptions — no payment is taken
+    (C-09). Each subscriber counts at the price they signed up at, scaled to
+    30 days.
+
+    The list shows display id and name only. Account details stay with the
+    Account Administrator.
+    """
+    from datetime import timedelta
+
+    from .subscription import load_plan, subscription_status
+
+    total_users = (
+        db.query(func.count(models.User.id))
+        .filter(models.User.role == models.ROLE_USER)
+        .scalar()
+        or 0
+    )
+    rows = (
+        db.query(models.Subscription, models.User)
+        .join(models.User, models.User.id == models.Subscription.user_id)
+        .filter(models.User.role == models.ROLE_USER)
+        .order_by(models.Subscription.started_at.desc())
+        .all()
+    )
+
+    premium_plan = load_plan(db, "premium")
+    period_days = premium_plan.billing_period_days if premium_plan else 30
+    month_ago = models.utcnow() - timedelta(days=30)
+
+    def aware(dt):
+        if dt is not None and dt.tzinfo is None:
+            return dt.replace(tzinfo=models.utcnow().tzinfo)
+        return dt
+
+    counts = {"active": 0, "cancelled": 0, "expired": 0}
+    revenue = 0.0
+    new_30d = cancelled_30d = 0
+    subscribers = []
+
+    for sub, user in rows:
+        status = subscription_status(sub)
+        if status in counts:
+            counts[status] += 1
+        if status == "active":
+            price = sub.price if sub.price is not None else (premium_plan.price if premium_plan else 0)
+            # Scale by this subscriber's own billing period, not the plan's
+            # current one — a period changed later doesn't apply to them.
+            own_days = period_days
+            if sub.started_at and sub.current_period_end:
+                own_days = max(1, round(
+                    (aware(sub.current_period_end) - aware(sub.started_at)).total_seconds() / 86400
+                ))
+            revenue += price * 30 / own_days
+        # A subscription row only exists once someone has upgraded, so every
+        # row is a Premium subscription — current, cancelled or lapsed. A
+        # re-upgrade resets started_at, so this counts upgrades in the window.
+        started = aware(sub.started_at)
+        if started and started >= month_ago:
+            new_30d += 1
+        cancelled_at = aware(sub.cancelled_at)
+        if cancelled_at and cancelled_at >= month_ago:
+            cancelled_30d += 1
+
+        subscribers.append(
+            schemas.SubscriberRow(
+                user_id=user.id,
+                display_id=user.display_id,
+                name=user.full_name,
+                plan="premium",
+                status=status,
+                price=sub.price,
+                started_at=sub.started_at,
+                current_period_end=sub.current_period_end,
+                cancelled_at=sub.cancelled_at,
+            )
+        )
+
+    premium = counts["active"]
+    return schemas.SubscriptionOverview(
+        total_users=total_users,
+        premium_active=premium,
+        free_users=total_users - premium,
+        cancelled=counts["cancelled"],
+        expired=counts["expired"],
+        new_premium_30d=new_30d,
+        cancelled_30d=cancelled_30d,
+        premium_share=round(premium / total_users * 100, 1) if total_users else None,
+        monthly_revenue_estimate=round(revenue, 2),
+        currency=premium_plan.currency if premium_plan else "SGD",
+        subscribers=subscribers,
+    )

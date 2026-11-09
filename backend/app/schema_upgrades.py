@@ -36,6 +36,7 @@ from sqlalchemy.engine import Engine
 # (table, column, SQL type). Types must be valid in both PostgreSQL and
 # SQLite — BOOLEAN, INTEGER, TEXT, VARCHAR, FLOAT and TIMESTAMP all are.
 ADDITIVE_COLUMNS: list[tuple[str, str, str]] = [
+    ("subscriptions", "price", "FLOAT"),
     ("support_requests", "support_type", "VARCHAR(20)"),
     ("support_requests", "is_persisting", "BOOLEAN"),
     ("support_requests", "last_message_at", "TIMESTAMP"),
@@ -162,3 +163,65 @@ def migrate_role_names(engine: Engine) -> int:
             )
             renamed += result.rowcount or 0
     return renamed
+
+
+# The plans the app starts with. Platform Administrators edit them from the
+# website; these only fill an empty table, so edits are never overwritten.
+DEFAULT_PLANS = [
+    {
+        "plan_key": "free",
+        "name": "Free",
+        "price": 0.0,
+        "features": [
+            "Log food, water, activity and sleep",
+            "Daily diet, activity and sleep recommendations",
+            "Simple explanations for every recommendation",
+            "View the past week of history",
+        ],
+    },
+    {
+        "plan_key": "premium",
+        "name": "Premium",
+        "price": 4.99,
+        "features": [
+            "Everything in Free",
+            "View the past month and year of history",
+            "Refresh insights any time",
+            "Technical explanations of each recommendation",
+            "Download a health report",
+        ],
+    },
+]
+
+
+def seed_default_plans(engine: Engine) -> int:
+    """Adds any missing default plan. Never changes an existing one."""
+    import json
+
+    from . import models
+    from .database import SessionLocal
+
+    db = SessionLocal()
+    added = 0
+    try:
+        for plan in DEFAULT_PLANS:
+            exists = (
+                db.query(models.SubscriptionPlan)
+                .filter(models.SubscriptionPlan.plan_key == plan["plan_key"])
+                .first()
+            )
+            if exists:
+                continue
+            db.add(
+                models.SubscriptionPlan(
+                    plan_key=plan["plan_key"],
+                    name=plan["name"],
+                    price=plan["price"],
+                    features=json.dumps(plan["features"]),
+                )
+            )
+            added += 1
+        db.commit()
+    finally:
+        db.close()
+    return added

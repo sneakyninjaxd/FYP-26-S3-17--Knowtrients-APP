@@ -47,6 +47,43 @@ def effective_plan(subscription: models.Subscription | None) -> str:
     return "premium"
 
 
+def subscription_status(subscription: models.Subscription | None) -> str:
+    """
+    A plain status for the admin pages: "none" (never upgraded), "active",
+    "cancelled", or "expired" (premium whose period ran out).
+    """
+    if subscription is None:
+        return "none"
+    if subscription.status == "cancelled":
+        return "cancelled"
+    if subscription.plan == "premium" and effective_plan(subscription) == "free":
+        return "expired"
+    return "active" if effective_plan(subscription) == "premium" else "none"
+
+
+def load_plan(db: Session, plan_key: str) -> models.SubscriptionPlan | None:
+    return (
+        db.query(models.SubscriptionPlan)
+        .filter(models.SubscriptionPlan.plan_key == plan_key)
+        .first()
+    )
+
+
+def plan_response(plan: models.SubscriptionPlan) -> schemas.PlanResponse:
+    import json
+
+    return schemas.PlanResponse(
+        plan_key=plan.plan_key,
+        name=plan.name,
+        price=plan.price,
+        currency=plan.currency,
+        billing_period_days=plan.billing_period_days,
+        features=json.loads(plan.features or "[]"),
+        updated_at=plan.updated_at,
+        updated_by_name=plan.updated_by.full_name if plan.updated_by else None,
+    )
+
+
 def get_subscription(db: Session, user_id: int) -> models.Subscription | None:
     return (
         db.query(models.Subscription)
@@ -67,6 +104,19 @@ def _response(subscription: models.Subscription | None) -> schemas.SubscriptionR
         cancelled_at=subscription.cancelled_at,
         is_premium=plan == "premium",
     )
+
+
+@router.get("/plans", response_model=list[schemas.PlanResponse])
+def list_plans(db: Session = Depends(get_db)):
+    """
+    The plans on offer, for the app's subscription screen and the website.
+    Public — no sign-in needed — since prices and features are what anyone
+    deciding whether to sign up should see.
+    """
+    plans = db.query(models.SubscriptionPlan).all()
+    order = {key: i for i, key in enumerate(models.PLAN_KEYS)}
+    plans.sort(key=lambda p: order.get(p.plan_key, len(order)))
+    return [plan_response(p) for p in plans]
 
 
 @router.get("", response_model=schemas.SubscriptionResponse)
@@ -95,6 +145,12 @@ def upgrade(
     if effective_plan(subscription) == "premium":
         raise HTTPException(status_code=400, detail="You are already on Premium")
 
+    # Price and period come from the premium plan, as set by the Platform
+    # Administrator. The price is recorded on the subscription, so a later
+    # price change doesn't alter what this user signed up at.
+    plan = load_plan(db, "premium")
+    period = timedelta(days=plan.billing_period_days) if plan else BILLING_PERIOD
+
     now = models.utcnow()
     if subscription is None:
         subscription = models.Subscription(user_id=current_user.id)
@@ -103,8 +159,9 @@ def upgrade(
     subscription.plan = "premium"
     subscription.status = "active"
     subscription.started_at = now
-    subscription.current_period_end = now + BILLING_PERIOD
+    subscription.current_period_end = now + period
     subscription.cancelled_at = None
+    subscription.price = plan.price if plan else None
 
     db.commit()
     db.refresh(subscription)

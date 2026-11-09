@@ -588,6 +588,12 @@ class Subscription(Base):
     current_period_end = Column(DateTime(timezone=True), nullable=True)
     cancelled_at = Column(DateTime(timezone=True), nullable=True)
 
+    # The plan price when the user upgraded. Recorded so that changing the
+    # premium price later doesn't rewrite what existing subscribers signed up
+    # at, and revenue figures use the price each subscriber actually agreed
+    # to. Added after the table existed, so created by schema_upgrades.
+    price = Column(Float, nullable=True)
+
     created_at = Column(DateTime(timezone=True), default=utcnow)
     updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
@@ -845,3 +851,40 @@ class RequestStat(Base):
     request_count = Column(Integer, nullable=False, default=0)
     error_count = Column(Integer, nullable=False, default=0)   # 5xx responses
     total_ms = Column(Float, nullable=False, default=0.0)
+
+
+# ---------------------------------------------------------------------------
+# Subscription plans
+# ---------------------------------------------------------------------------
+
+# The plans the code knows about. Their display names, prices and features
+# are editable; the keys are not, because the subscription logic checks for
+# them by key ("is this user on premium?").
+PLAN_KEYS = ("free", "premium")
+
+
+class SubscriptionPlan(Base):
+    """
+    The plans offered, as shown to users: display name, price and features.
+
+    Edited by Platform Administrators. `plan_key` is fixed and is what the
+    code uses; `name` is the display heading, so a plan can be renamed
+    without breaking anything. Price is in Singapore dollars per billing
+    period. Payment is still simulated (C-09) — this is what the app shows,
+    not a charge.
+    """
+
+    __tablename__ = "subscription_plans"
+
+    id = Column(Integer, primary_key=True, index=True)
+    plan_key = Column(String, unique=True, nullable=False, index=True)
+    name = Column(String, nullable=False)
+    price = Column(Float, nullable=False, default=0.0)
+    currency = Column(String, nullable=False, default="SGD")
+    billing_period_days = Column(Integer, nullable=False, default=30)
+    features = Column(Text, nullable=False, default="[]")   # JSON list of strings
+
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+    updated_by_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+
+    updated_by = relationship("User")

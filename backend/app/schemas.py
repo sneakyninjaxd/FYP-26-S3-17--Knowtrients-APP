@@ -321,6 +321,14 @@ class AdminAccountRow(BaseModel):
     status: str             # "Active" | "Suspended"
     created_at: datetime | None = None
 
+    # Subscription, for app users only — null for staff, who don't subscribe.
+    plan: str | None = None                   # "free" | "premium"
+    plan_name: str | None = None              # display name, e.g. "Premium"
+    subscription_status: str | None = None    # "none" | "active" | "cancelled" | "expired"
+    subscription_started: datetime | None = None
+    subscription_ends: datetime | None = None
+    subscription_cancelled: datetime | None = None
+
 
 class AdminAccountDetail(AdminAccountRow):
     """The View Account page: profile summary and recent activity counts."""
@@ -863,3 +871,88 @@ class DeleteOwnAccount(BaseModel):
     """
 
     password: str = Field(min_length=1)
+
+
+
+# ---------------------------------------------------------------------------
+# Subscription plans
+# ---------------------------------------------------------------------------
+
+
+class PlanResponse(BaseModel):
+    plan_key: str                  # fixed: "free" | "premium"
+    name: str                      # display heading, editable
+    price: float
+    currency: str = "SGD"
+    billing_period_days: int = 30
+    features: list[str] = []
+    updated_at: datetime | None = None
+    updated_by_name: str | None = None
+
+
+class PlanUpdate(BaseModel):
+    """
+    A Platform Administrator's edit to a plan. Every field is optional, so the
+    page can send only what changed. The plan key can't be changed.
+    """
+
+    name: str | None = Field(default=None, min_length=1, max_length=50)
+    price: float | None = Field(default=None, ge=0, le=999.99)
+    billing_period_days: int | None = Field(default=None, ge=1, le=366)
+    features: list[str] | None = None
+
+    @field_validator("name")
+    @classmethod
+    def name_not_blank(cls, v):
+        if v is not None and not v.strip():
+            raise ValueError("Plan name can't be blank.")
+        return v.strip() if v else v
+
+    @field_validator("price")
+    @classmethod
+    def two_decimals(cls, v):
+        return round(v, 2) if v is not None else v
+
+    @field_validator("features")
+    @classmethod
+    def clean_features(cls, v):
+        if v is None:
+            return v
+        cleaned = [f.strip() for f in v if f and f.strip()]
+        if not cleaned:
+            raise ValueError("A plan needs at least one feature.")
+        if len(cleaned) > 20:
+            raise ValueError("A plan can list at most 20 features.")
+        if any(len(f) > 120 for f in cleaned):
+            raise ValueError("Each feature must be 120 characters or fewer.")
+        return cleaned
+
+
+class SubscriberRow(BaseModel):
+    """One subscriber, as the Platform Administrator sees them."""
+
+    user_id: int
+    display_id: str | None = None
+    name: str
+    plan: str
+    status: str                    # "active" | "cancelled" | "expired"
+    price: float | None = None     # what they signed up at
+    started_at: datetime | None = None
+    current_period_end: datetime | None = None
+    cancelled_at: datetime | None = None
+
+
+class SubscriptionOverview(BaseModel):
+    """Headline figures for the Platform Administrator's subscription page."""
+
+    total_users: int = 0
+    premium_active: int = 0
+    free_users: int = 0
+    cancelled: int = 0
+    expired: int = 0
+    new_premium_30d: int = 0
+    cancelled_30d: int = 0
+    premium_share: float | None = None          # active premium / all users, %
+    monthly_revenue_estimate: float = 0.0       # simulated — no payment is taken
+    currency: str = "SGD"
+    subscribers: list[SubscriberRow] = []

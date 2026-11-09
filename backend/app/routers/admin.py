@@ -23,7 +23,7 @@ that widening one role's powers later doesn't silently widen the other's.
 from datetime import date as date_type, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, or_
+from sqlalchemy import and_, func, not_, or_
 from sqlalchemy.orm import Session
 
 from .. import models, schemas
@@ -38,8 +38,35 @@ def _split(value: str | None) -> list[str]:
     return [v for v in value.split(",") if v] if value else []
 
 
-def _row(user: models.User) -> schemas.AdminAccountRow:
-    return schemas.AdminAccountRow(
+def _subscriptions_for(db: Session, user_ids: list[int]) -> dict:
+    """Subscriptions for many users in one query, keyed by user id."""
+    if not user_ids:
+        return {}
+    rows = db.query(models.Subscription).filter(models.Subscription.user_id.in_(user_ids)).all()
+    return {r.user_id: r for r in rows}
+
+
+def _plan_names(db: Session) -> dict:
+    return {p.plan_key: p.name for p in db.query(models.SubscriptionPlan).all()}
+
+
+def _row(user: models.User, subscription=None, plan_names: dict | None = None) -> schemas.AdminAccountRow:
+    from .subscription import effective_plan, subscription_status
+
+    # Staff don't subscribe, so their subscription fields stay empty.
+    sub_fields = {}
+    if user.role == models.ROLE_USER:
+        plan = effective_plan(subscription)
+        sub_fields = dict(
+            plan=plan,
+            plan_name=(plan_names or {}).get(plan, plan.title()),
+            subscription_status=subscription_status(subscription),
+            subscription_started=subscription.started_at if subscription else None,
+            subscription_ends=subscription.current_period_end if subscription else None,
+            subscription_cancelled=subscription.cancelled_at if subscription else None,
+        )
+
+    return schemas.AdminAccountRow(**sub_fields,
         id=user.id,
         display_id=user.display_id,
         first_name=user.first_name,
@@ -64,6 +91,7 @@ def list_accounts(
     ),
     q: str | None = Query(default=None, description="Search id, name or email"),
     status_filter: str | None = Query(default=None, alias="status"),
+    plan: str | None = Query(default=None, description="free | premium — app users only"),
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
@@ -83,6 +111,26 @@ def list_accounts(
     if status_filter and status_filter != "All":
         query = query.filter(models.User.is_active == (status_filter == "Active"))
 
+    if plan and plan.lower() in models.PLAN_KEYS:
+        # "Premium" means entitled right now: active and not past its period
+        # end — the same rule the app uses. Everyone else is on free.
+        now = models.utcnow()
+        is_premium = and_(
+            models.Subscription.plan == "premium",
+            models.Subscription.status == "active",
+            or_(
+                models.Subscription.current_period_end.is_(None),
+                models.Subscription.current_period_end > now,
+            ),
+        )
+        query = query.outerjoin(
+            models.Subscription, models.Subscription.user_id == models.User.id
+        ).filter(models.User.role == models.ROLE_USER)
+        if plan.lower() == "premium":
+            query = query.filter(is_premium)
+        else:
+            query = query.filter(or_(models.Subscription.id.is_(None), not_(is_premium)))
+
     if q:
         pattern = f"%{q.strip()}%"
         query = query.filter(
@@ -97,7 +145,9 @@ def list_accounts(
     users = (
         query.order_by(models.User.created_at.desc()).offset(offset).limit(limit).all()
     )
-    return [_row(u) for u in users]
+    subs = _subscriptions_for(db, [u.id for u in users])
+    names = _plan_names(db)
+    return [_row(u, subs.get(u.id), names) for u in users]
 
 
 @router.post(
@@ -180,7 +230,8 @@ def get_account(
         .scalar()
     )
 
-    base = _row(user)
+    subscription = _subscriptions_for(db, [user.id]).get(user.id)
+    base = _row(user, subscription, _plan_names(db))
     return schemas.AdminAccountDetail(
         **base.model_dump(),
         age=profile.age if profile else None,

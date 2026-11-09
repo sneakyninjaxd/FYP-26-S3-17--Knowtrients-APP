@@ -34,6 +34,7 @@ from .schema_upgrades import (  # noqa: E402
     ensure_columns,
     ensure_indexes,
     migrate_role_names,
+    seed_default_plans,
 )
 
 _added = ensure_columns(engine)
@@ -43,6 +44,8 @@ ensure_indexes(engine)
 _renamed = migrate_role_names(engine)
 if _renamed:
     print(f"Schema upgrade: renamed the role on {_renamed} staff account(s)")
+if seed_default_plans(engine):
+    print("Schema upgrade: added the default subscription plans")
 _filled = backfill_support_type(engine)
 if _filled:
     print(f"Schema upgrade: set support_type on {_filled} existing request(s)")
