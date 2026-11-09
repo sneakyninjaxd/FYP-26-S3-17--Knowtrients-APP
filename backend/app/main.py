@@ -13,6 +13,8 @@ from .routers import (
     fitness,
     im,
     logs,
+    password_reset,
+    plans,
     platform,
     profile,
     recommendation,
@@ -141,6 +143,8 @@ app.include_router(platform.router)
 app.include_router(subscription.router)
 app.include_router(satisfaction.router)
 app.include_router(im.router)
+app.include_router(plans.router)
+app.include_router(password_reset.router)
 
 
 @app.get("/health", tags=["meta"])

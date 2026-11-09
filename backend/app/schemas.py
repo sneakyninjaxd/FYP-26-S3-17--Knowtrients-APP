@@ -329,6 +329,14 @@ class AdminAccountRow(BaseModel):
     subscription_ends: datetime | None = None
     subscription_cancelled: datetime | None = None
 
+    # The names the website's View Account page reads:
+    #   subscription_plan       "free" | "premium"
+    #   subscription_renews_at  when an active premium plan next renews
+    #   subscription_ended_at   when premium ended — cancelled or lapsed
+    subscription_plan: str | None = None
+    subscription_renews_at: datetime | None = None
+    subscription_ended_at: datetime | None = None
+
 
 class AdminAccountDetail(AdminAccountRow):
     """The View Account page: profile summary and recent activity counts."""

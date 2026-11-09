@@ -888,3 +888,29 @@ class SubscriptionPlan(Base):
     updated_by_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
 
     updated_by = relationship("User")
+
+
+# ---------------------------------------------------------------------------
+# Password reset
+# ---------------------------------------------------------------------------
+
+
+class PasswordResetCode(Base):
+    """
+    A six-digit code emailed to someone who forgot their password.
+
+    Only a keyed hash of the code is stored, so reading the database doesn't
+    reveal working codes. Each code expires after a few minutes and allows a
+    limited number of guesses. A new request replaces any earlier code.
+    """
+
+    __tablename__ = "password_reset_codes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), unique=True, nullable=False
+    )
+    code_hash = Column(String, nullable=False)
+    attempts = Column(Integer, nullable=False, default=0)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utcnow)

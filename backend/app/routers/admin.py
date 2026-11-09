@@ -57,7 +57,17 @@ def _row(user: models.User, subscription=None, plan_names: dict | None = None) -
     sub_fields = {}
     if user.role == models.ROLE_USER:
         plan = effective_plan(subscription)
+        status = subscription_status(subscription)
+        if status == "cancelled":
+            ended = subscription.cancelled_at
+        elif status == "expired":
+            ended = subscription.current_period_end
+        else:
+            ended = None
         sub_fields = dict(
+            subscription_plan=plan,
+            subscription_renews_at=subscription.current_period_end if status == "active" else None,
+            subscription_ended_at=ended,
             plan=plan,
             plan_name=(plan_names or {}).get(plan, plan.title()),
             subscription_status=subscription_status(subscription),

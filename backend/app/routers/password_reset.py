@@ -18,13 +18,16 @@ Safeguards:
   is only sent if the account matches, so a code can't be used against an
   account of the other type.
 - The reset token is signed with a different key from login tokens, so it can
-  never be used to sign in. It also carries a fingerprint of the current
+  never be used to sign in.
+- PASSWORD_RESET_ANY_CODE switches on a demo mode that accepts any six
+  digits. Off by default; see the warning beside it below. It also carries a fingerprint of the current
   password, so once the password changes, the token stops working — it can't
   be used twice.
 """
 
 import hashlib
 import hmac
+import os
 import secrets
 from datetime import datetime, timedelta
 
@@ -46,6 +49,20 @@ TOKEN_LIFETIME = timedelta(minutes=15)
 # Distinct from the login-token key, so a reset token is never accepted as a
 # login token, and vice versa.
 _RESET_KEY = f"{auth.SECRET_KEY}:password-reset"
+
+# DEMO SWITCH. When PASSWORD_RESET_ANY_CODE is "true", step 2 accepts any six
+# digits for an existing account, so the flow can be shown without setting up
+# email. This lets anyone who knows an email address reset that account's
+# password — including administrator accounts — so it is off unless
+# deliberately switched on, and should never be on for real users.
+ANY_CODE = os.getenv("PASSWORD_RESET_ANY_CODE", "").strip().lower() in ("1", "true", "yes")
+
+if ANY_CODE:
+    print(
+        "WARNING: PASSWORD_RESET_ANY_CODE is on — password reset accepts any "
+        "6-digit code. Anyone who knows an email address can reset that "
+        "account's password. Turn it off before real users sign up."
+    )
 
 
 def _hash_code(user_id: int, code: str) -> str:
@@ -91,7 +108,8 @@ def request_reset(
     email = payload.email.lower().strip()
     user = db.query(models.User).filter(models.User.email == email).first()
 
-    if user and user.is_active and _role_matches(user, payload.role):
+    # In demo mode no code is needed, so nothing is created or emailed.
+    if not ANY_CODE and user and user.is_active and _role_matches(user, payload.role):
         now = models.utcnow()
         existing = (
             db.query(models.PasswordResetCode)
@@ -142,6 +160,17 @@ def verify_code(payload: ResetVerify, db: Session = Depends(get_db)):
     if user is None:
         raise wrong
 
+    if ANY_CODE:
+        # Demo mode: any six digits pass. The account must still exist, be
+        # active, and match the admin type chosen on the page.
+        if not user.is_active:
+            raise wrong
+        if not _role_matches(user, payload.role):
+            label = models.ROLE_LABELS.get(models.normalize_role(payload.role), payload.role)
+            article = "an" if label[:1].upper() in "AEIOU" else "a"
+            raise HTTPException(status_code=403, detail=f"This email is not {article} {label} account.")
+        return _issue_token(user)
+
     record = (
         db.query(models.PasswordResetCode)
         .filter(models.PasswordResetCode.user_id == user.id)
@@ -172,7 +201,11 @@ def verify_code(payload: ResetVerify, db: Session = Depends(get_db)):
     # The code is spent; from here the token carries the authority.
     db.delete(record)
     db.commit()
+    return _issue_token(user)
 
+
+def _issue_token(user: models.User) -> dict:
+    """A short-lived reset token, signed with the reset key."""
     token = jwt.encode(
         {
             "sub": str(user.id),
