@@ -35,8 +35,14 @@ export default function Finish() {
   return (
     <SafeAreaView style={styles.container}>
 
+      {/* Same badge as everywhere else, scaled up for this full-page moment. */}
       <View style={styles.logoContainer}>
-        <Text style={styles.logo}>✦ Knowtrients</Text>
+        <View style={styles.brandRow}>
+          <View style={styles.logoBadge}>
+            <Text style={styles.logoGlyph}>✦</Text>
+          </View>
+          <Text style={styles.logo}>Knowtrients</Text>
+        </View>
       </View>
 
       <View style={styles.content}>
@@ -69,7 +75,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
 
-  logo: { color: '#fff', fontSize: 28, fontFamily: 'serif' },
+  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+
+  logoBadge: {
+    width: 42,
+    height: 42,
+    borderRadius: 11,
+    backgroundColor: '#48DDB0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  logoGlyph: { fontSize: 21, color: '#00382B' },
+
+  logo: { color: '#fff', fontSize: 26, fontWeight: '600' },
 
   content: {
     flex: 1,

@@ -1,4 +1,5 @@
 import { useFood } from '@/contexts/food-context';
+import { toLogDate } from '@/services/api';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -24,8 +25,17 @@ const MEAL_NAMES = {
 
 const TABS = ['Recent', 'My Favourites'];
 
+/** Parses a YYYY-MM-DD param without the UTC shift `new Date(str)` adds. */
+const parseLogDate = (value) => {
+  if (typeof value !== 'string') return null;
+  const [y, m, d] = value.split('-').map(Number);
+  if (!y || !m || !d) return null;
+  const parsed = new Date(y, m - 1, d);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
 export default function AddFood() {
-  const { meal } = useLocalSearchParams();
+  const { meal, date: dateParam } = useLocalSearchParams();
   const {
     entries,
     addEntry,
@@ -33,7 +43,23 @@ export default function AddFood() {
     favourites,
     isFavourite,
     toggleFavourite,
+    activeDate,
+    loadEntries,
   } = useFood();
+
+  const key = typeof dateParam === 'string' ? dateParam : toLogDate();
+  const date = parseLogDate(key) ?? new Date();
+
+  /**
+   * addEntry posts against the provider's activeDate, so make sure it points
+   * at the day we were opened for. Normally the meal screen has already set
+   * it; this covers arriving here by any other route, where a mismatch would
+   * silently file the food under the wrong day.
+   */
+  useEffect(() => {
+    if (activeDate !== key) loadEntries(key);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, activeDate]);
 
   const [query, setQuery] = useState('');
   const [tab, setTab] = useState('Recent');
@@ -176,7 +202,7 @@ export default function AddFood() {
 
         <Text style={styles.title}>{MEAL_NAMES[meal] ?? meal}</Text>
         <Text style={styles.date}>
-          {new Date().toLocaleDateString('en-GB', {
+          {date.toLocaleDateString('en-GB', {
             weekday: 'long', day: 'numeric', month: 'long',
           })}
         </Text>

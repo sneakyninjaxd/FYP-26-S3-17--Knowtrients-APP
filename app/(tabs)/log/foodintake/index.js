@@ -1,11 +1,14 @@
 import { useFood } from '@/contexts/food-context';
 import { useProfile } from '@/contexts/profile-context';
+import { toLogDate } from '@/services/api';
 import { dailyGoals } from '@/src/goals';
 import { Ionicons } from '@expo/vector-icons';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -48,14 +51,27 @@ function Bar({ label, value, goal, unit, color }) {
 }
 
 export default function FoodLog() {
-  const { summary, isLoading, loadSummary } = useFood();
+  const { summary, isLoading, loadSummary, loadEntries } = useFood();
   const { profile } = useProfile();
+
+  /**
+   * The day being viewed. Meals are logged against this, so a meal missed at
+   * the time can be filled in later — the same idea as the calendar on My
+   * Sleep. The provider holds it as `activeDate`, which is what addEntry
+   * posts against, so loading a date here is what makes the rest follow.
+   */
+  const [date, setDate] = useState(new Date());
+  const [showPicker, setShowPicker] = useState(false);
+
+  const key = toLogDate(date);
 
   // Refetch on focus so returning from the add screen shows the new entry.
   useFocusEffect(
     useCallback(() => {
-      loadSummary();
-    }, [loadSummary])
+      loadSummary(key);
+      loadEntries(key);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [key])
   );
 
   const goals = useMemo(() => dailyGoals(profile), [profile]);
@@ -92,18 +108,42 @@ export default function FoodLog() {
           </TouchableOpacity>
         </View>
         <View style={styles.divider} />
-        <Text style={styles.title}>Food Log</Text>
-        <Text style={styles.date}>
-          {new Date().toLocaleDateString('en-GB', {
-            weekday: 'long', day: 'numeric', month: 'long',
-          })}
-        </Text>
+
+        <View style={styles.titleRow}>
+          <View>
+            <Text style={styles.title}>Food Log</Text>
+            <Text style={styles.date}>
+              {date.toLocaleDateString('en-GB', {
+                weekday: 'long', day: 'numeric', month: 'long',
+              })}
+            </Text>
+          </View>
+
+          <TouchableOpacity onPress={() => setShowPicker(true)}>
+            <Ionicons name="calendar-outline" size={26} color="#48DDB0" />
+          </TouchableOpacity>
+        </View>
+
+        {showPicker && (
+          <DateTimePicker
+            value={date}
+            mode="date"
+            maximumDate={new Date()}
+            onChange={(event, selected) => {
+              setShowPicker(Platform.OS === 'ios');
+              if (selected) setDate(selected);
+            }}
+          />
+        )}
 
         {/* Today's intake */}
         <View style={styles.scoreCard}>
           <View style={styles.scoreRow}>
             <View style={styles.calorieBlock}>
-              <Text style={styles.scoreTitle}>Today&apos;s Intake</Text>
+              {/* Says which day, since the calendar can move off today. */}
+              <Text style={styles.scoreTitle}>
+                {key === toLogDate() ? "Today's Intake" : 'Intake'}
+              </Text>
               {isLoading && !totals ? (
                 <ActivityIndicator size="small" color="#4ECBA0" style={{ marginTop: 12 }} />
               ) : (
@@ -153,7 +193,14 @@ export default function FoodLog() {
           <TouchableOpacity
             key={meal.id}
             style={styles.mealRow}
-            onPress={() => router.push(`/log/foodintake/${meal.id}`)}
+            // Carry the viewed date across, so a meal opened from an older
+            // day logs against that day rather than today.
+            onPress={() =>
+              router.push({
+                pathname: `/log/foodintake/${meal.id}`,
+                params: { date: key },
+              })
+            }
           >
             <View>
               <Text style={styles.mealName}>{meal.name}</Text>
@@ -202,22 +249,26 @@ const styles = StyleSheet.create({
   logo: { color: '#fff', fontSize: 19, fontWeight: '600' },
 
   divider: { height: 1, backgroundColor: '#123B2F' },
-  divider: { height: 1, backgroundColor: '#123B2F' },
+
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    paddingHorizontal: 25,
+    paddingTop: 20,
+    marginBottom: 16,
+  },
 
   title: {
     color: '#FFFFFF',
     fontSize: 32,
     fontFamily: 'serif',
-    paddingHorizontal: 25,
-    paddingTop: 20,
   },
 
   date: {
     color: '#48DDB0',
     fontSize: 11,
-    paddingHorizontal: 25,
     marginTop: 4,
-    marginBottom: 16,
   },
 
   scoreCard: {

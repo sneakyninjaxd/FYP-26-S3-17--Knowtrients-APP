@@ -237,11 +237,13 @@ const styles = StyleSheet.create({
   logo: { color: '#fff', fontSize: 19, fontWeight: '600' },
 
   divider: { height: 1, backgroundColor: '#123B2F' },
+
   title: {
     color: '#fff',
     fontSize: 30,
     fontFamily: 'serif',
     paddingHorizontal: 25,
+    paddingTop: 20,
     marginBottom: 20,
   },
 

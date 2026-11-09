@@ -66,7 +66,14 @@ export default function ProfileGoal() {
       <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
 
         <View style={styles.logoContainer}>
-          <Text style={styles.logo}>✦ Knowtrients</Text>
+          {/* Same badge as the tab screens, so the brand reads the same
+              everywhere rather than changing between onboarding and the app. */}
+          <View style={styles.brandRow}>
+            <View style={styles.logoBadge}>
+              <Text style={styles.logoGlyph}>✦</Text>
+            </View>
+            <Text style={styles.logo}>Knowtrients</Text>
+          </View>
           <Text style={styles.tagline}>Know your nutrients, Know your health</Text>
         </View>
 
@@ -190,7 +197,20 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#020D09' },
 
   logoContainer: { paddingLeft: 25, paddingTop: 30, marginBottom: 30 },
-  logo: { color: '#fff', fontSize: 20, fontFamily: 'serif' },
+
+  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+
+  logoBadge: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    backgroundColor: '#48DDB0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  logoGlyph: { fontSize: 15, color: '#00382B' },
+  logo: { color: '#fff', fontSize: 19, fontWeight: '600' },
   tagline: { color: '#fff', fontSize: 12, marginTop: 3 },
 
   progressRow: {

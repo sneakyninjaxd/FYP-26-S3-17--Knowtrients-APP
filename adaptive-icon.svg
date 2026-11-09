@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024"
+     width="1024" height="1024">
+  <!--
+    Android adaptive foreground: the mark alone on transparency, scaled
+    into the middle ~66% so a launcher's circular or squircle mask cannot
+    clip the arms. The mint comes from backgroundColor in app.json.
+  -->
+  <g transform="translate(512 512) scale(0.66) translate(-512 -512)">
+    <path d="M512 160
+             Q548 428 784 512
+             Q548 596 512 864
+             Q476 596 240 512
+             Q476 428 512 160 Z"
+          fill="#00382B"/>
+  </g>
+</svg>

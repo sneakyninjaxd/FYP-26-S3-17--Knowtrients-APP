@@ -65,7 +65,14 @@ export default function ProfileYou() {
 
         {/* Logo */}
         <View style={styles.logoContainer}>
-          <Text style={styles.logo}>✦ Knowtrients</Text>
+          {/* Same badge as the tab screens, so the brand reads the same
+              everywhere rather than changing between onboarding and the app. */}
+          <View style={styles.brandRow}>
+            <View style={styles.logoBadge}>
+              <Text style={styles.logoGlyph}>✦</Text>
+            </View>
+            <Text style={styles.logo}>Knowtrients</Text>
+          </View>
           <Text style={styles.tagline}>Know your nutrients, Know your health</Text>
         </View>
 
@@ -88,9 +95,6 @@ export default function ProfileYou() {
         </View>
 
         <Text style={styles.title}>Tell us about you</Text>
-        <Text style={styles.description}>
-          This information helps Knowtrients give recommendations more accurately
-        </Text>
 
         {/* Date of birth */}
         <Text style={styles.label}>Date of Birth:</Text>
@@ -141,14 +145,10 @@ export default function ProfileYou() {
           <Ionicons name="chevron-down" size={14} color="#48DDB0" />
         </TouchableOpacity>
 
-        <Text style={styles.helperText}>
-          Knowing your country allows Knowtrients to recommend local dishes to you.
-        </Text>
-
         {/* Height + weight */}
         <View style={styles.row}>
           <View style={styles.field}>
-            <Text style={styles.label}>Height (cm):</Text>
+            <Text style={styles.fieldLabel}>Height (cm):</Text>
             <View style={styles.measureInput}>
               <TextInput
                 style={styles.input}
@@ -163,7 +163,7 @@ export default function ProfileYou() {
           </View>
 
           <View style={styles.field}>
-            <Text style={styles.label}>Weight (kg):</Text>
+            <Text style={styles.fieldLabel}>Weight (kg):</Text>
             <View style={styles.measureInput}>
               <TextInput
                 style={styles.input}
@@ -284,7 +284,20 @@ const styles = StyleSheet.create({
 
   logoContainer: { paddingLeft: 25, paddingTop: 30, marginBottom: 30 },
 
-  logo: { color: '#fff', fontSize: 20, fontFamily: 'serif' },
+  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+
+  logoBadge: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    backgroundColor: '#48DDB0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  logoGlyph: { fontSize: 15, color: '#00382B' },
+
+  logo: { color: '#fff', fontSize: 19, fontWeight: '600' },
   tagline: { color: '#fff', fontSize: 12, marginTop: 3 },
 
   progressRow: {
@@ -439,9 +452,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: 25,
   },
 
-  row: { flexDirection: 'row', gap: 20, paddingHorizontal: 25 },
+  // The extra top margin separates this pair from the country picker, which
+  // otherwise sits right on top of the Height label.
+  row: {
+    flexDirection: 'row',
+    gap: 20,
+    paddingHorizontal: 25,
+    marginTop: 26,
+  },
 
   field: { flex: 1 },
+
+  /**
+   * `label` carries its own 25px horizontal padding for the full-width fields.
+   * Inside this row the parent already applies it, so these labels need a
+   * version without it — otherwise they sit 50px in while their inputs
+   * start at 25.
+   */
+  fieldLabel: {
+    color: '#D4E6DF',
+    fontSize: 12,
+    marginBottom: 7,
+  },
 
   measureInput: {
     height: 38,

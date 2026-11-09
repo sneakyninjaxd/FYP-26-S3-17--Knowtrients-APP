@@ -22,16 +22,34 @@ const MEAL_NAMES = {
   'evening-snack': 'Evening Snack',
 };
 
+/** Parses a YYYY-MM-DD param without the UTC shift `new Date(str)` adds. */
+const parseLogDate = (value) => {
+  if (typeof value !== 'string') return null;
+  const [y, m, d] = value.split('-').map(Number);
+  if (!y || !m || !d) return null;
+  const parsed = new Date(y, m - 1, d);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
 export default function MealLog() {
-  const { meal } = useLocalSearchParams();
+  const { meal, date: dateParam } = useLocalSearchParams();
   const { entries, isLoading, loadEntries, updateQuantity, deleteEntry } = useFood();
   const [editing, setEditing] = useState(false);
 
-  // Pick up anything added on the search screen before we navigated back.
+  /** The day this meal belongs to — passed in from the Food Log calendar. */
+  const key = typeof dateParam === 'string' ? dateParam : toLogDate();
+  const date = parseLogDate(key) ?? new Date();
+
+  /**
+   * Loading this date also sets the provider's `activeDate`, which is what
+   * addEntry posts against — so the search screen saves to the right day
+   * without needing to know about it.
+   */
   useFocusEffect(
     useCallback(() => {
-      loadEntries(toLogDate());
-    }, [loadEntries])
+      loadEntries(key);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [key])
   );
 
   /**
@@ -55,7 +73,7 @@ export default function MealLog() {
 
         <Text style={styles.title}>{MEAL_NAMES[meal] ?? meal}</Text>
         <Text style={styles.date}>
-          {new Date().toLocaleDateString('en-GB', {
+          {date.toLocaleDateString('en-GB', {
             weekday: 'long', day: 'numeric', month: 'long',
           })}
         </Text>
@@ -141,7 +159,12 @@ export default function MealLog() {
         {editing && (
           <TouchableOpacity
             style={styles.addMore}
-            onPress={() => router.push(`/log/foodintake/${meal}/add-search`)}
+            onPress={() =>
+              router.push({
+                pathname: `/log/foodintake/${meal}/add-search`,
+                params: { date: key },
+              })
+            }
           >
             <Text style={styles.addMoreText}>+ Add more items</Text>
           </TouchableOpacity>
