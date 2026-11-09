@@ -24,6 +24,39 @@ const timeToMinutes = (value) => {
   return h * 60 + m;
 };
 
+/**
+ * The mean of a set of clock times.
+ *
+ * A plain arithmetic mean is wrong here, because the clock wraps. Bedtimes
+ * of 23:00 and 01:00 are two hours apart, but as minutes-since-midnight
+ * they're 1380 and 60, and their average is 720 — midday, the furthest
+ * possible point from the real answer of midnight.
+ *
+ * So each time is treated as an angle on a 24-hour circle, the sine and
+ * cosine components are averaged, and the result is converted back. This is
+ * the standard circular mean, the same method used for compass bearings.
+ */
+const meanClockMinutes = (values) => {
+  if (!values.length) return null;
+
+  const TWO_PI = Math.PI * 2;
+  let sin = 0;
+  let cos = 0;
+
+  for (const v of values) {
+    const angle = (v / 1440) * TWO_PI;
+    sin += Math.sin(angle);
+    cos += Math.cos(angle);
+  }
+
+  // Both components near zero means the times are spread evenly around the
+  // clock, so no average is meaningful — 3am and 3pm have no midpoint.
+  if (Math.abs(sin) < 1e-9 && Math.abs(cos) < 1e-9) return null;
+
+  const mean = Math.atan2(sin / values.length, cos / values.length);
+  return ((mean / TWO_PI) * 1440 + 1440) % 1440;
+};
+
 export default function SleepStatistics() {
   const { sleepLogs, isLoading, loadSleep } = useSleep();
 
@@ -64,12 +97,20 @@ export default function SleepStatistics() {
       .map((s) => timeToMinutes(s[field]))
       .filter((v) => v !== null);
 
-    if (!values.length) return '--';
+    const mins = meanClockMinutes(values);
+    if (mins === null) return '--';
 
-    const mins = values.reduce((sum, v) => sum + v, 0) / values.length;
-    const h = Math.floor(mins / 60);
-    const m = Math.round(mins % 60);
-    return `${h % 12 || 12}.${String(m).padStart(2, '0')}${h < 12 ? 'am' : 'pm'}`;
+    let h = Math.floor(mins / 60);
+    let m = Math.round(mins % 60);
+
+    // Rounding 59.6 minutes up has to carry into the hour.
+    if (m === 60) {
+      m = 0;
+      h = (h + 1) % 24;
+    }
+
+    // A colon, not a dot — "1.33am" reads as a decimal number.
+    return `${h % 12 || 12}:${String(m).padStart(2, '0')}${h < 12 ? 'am' : 'pm'}`;
   };
 
   /**

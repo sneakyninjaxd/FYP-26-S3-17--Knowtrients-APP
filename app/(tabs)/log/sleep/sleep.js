@@ -154,6 +154,15 @@ export default function Sleep() {
             </Text>
           )}
 
+          {/* Whatever was written on the add screen — how the night felt is
+              the part a duration can't carry. */}
+          {todayLog?.notes ? (
+            <View style={styles.notesBlock}>
+              <Text style={styles.notesLabel}>Notes:</Text>
+              <Text style={styles.notes}>{todayLog.notes}</Text>
+            </View>
+          ) : null}
+
           <Text
             style={styles.statsLink}
             onPress={() => router.push('/log/sleep/overallsleepstatistics')}
@@ -273,6 +282,21 @@ const styles = StyleSheet.create({
   unit: { fontSize: 20, color: '#4ECBA0' },
 
   times: { color: '#60766E', fontSize: 10, marginTop: 4 },
+
+  notesBlock: {
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#123B2F',
+  },
+
+  notesLabel: {
+    color: '#48DDB0',
+    fontSize: 10,
+    marginBottom: 4,
+  },
+
+  notes: { color: '#A5C4B8', fontSize: 11, lineHeight: 16 },
 
   statsLink: {
     color: '#60766E',

@@ -231,8 +231,7 @@ export default function SupportThread() {
                 a second line to themselves. */}
             {!messages.some((m) => !m.is_mine) && (
               <Text style={styles.empty}>
-                No reply yet. We&apos;ll get back to you as soon as we can —
-                pull down to check for one.
+                No reply yet. We&apos;ll get back to you as soon as we can
               </Text>
             )}
 

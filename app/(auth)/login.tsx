@@ -104,6 +104,22 @@ export default function LoginScreen() {
               Click here!
             </Text>
           </View>
+
+          {/*
+            Reset happens on the web app, not in here — there are no password
+            reset endpoints on the API yet, so this hands off rather than
+            offering a form that couldn't do anything.
+          */}
+          <Text
+            style={styles.forgotLink}
+            onPress={() =>
+              Linking.openURL(
+                'https://knowtrients.onrender.com/forgot-password.html?for=user'
+              )
+            }
+          >
+            Forgot password?
+          </Text>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -156,6 +172,14 @@ const styles = StyleSheet.create({
     color: brand.textPrimary,
     fontSize: 14,
   },
+  forgotLink: {
+    color: brand.accent,
+    fontSize: 13,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginTop: 12,
+  },
+
   button: {
     backgroundColor: brand.accent,
     borderRadius: 10,

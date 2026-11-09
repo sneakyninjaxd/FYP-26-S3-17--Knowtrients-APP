@@ -23,7 +23,7 @@ const ISSUES = [
   { id: 'password', label: 'Password' },
   { id: 'account', label: 'Account' },
   { id: 'subscription', label: 'Subscription' },
-  { id: 'account_other', label: 'others' },
+  { id: 'account_other', label: 'Other' },
 ];
 
 export default function AccountSupport() {
@@ -50,7 +50,10 @@ export default function AccountSupport() {
     try {
       await api.createSupportRequest(token, {
         category: issue,
-        subject: selectedLabel ?? 'Account support',
+        // Prefixed the way the bug form does it, so Previous Requests shows
+        // which form a request came from as well as what it was about —
+        // a bare "Subscription" reads as a category, not a request.
+        subject: `Account Support — ${selectedLabel ?? 'Other'}`,
         body: description.trim(),
       });
 

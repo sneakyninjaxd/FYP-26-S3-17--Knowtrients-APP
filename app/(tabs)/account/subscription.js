@@ -23,6 +23,7 @@ const PLANS = [
       'View progress history for the last 7 days',
       'View regular progress charts',
       'Manual sleep input',
+      'Explanation for each recommendation'
     ],
   },
   {
@@ -33,6 +34,7 @@ const PLANS = [
       'View full progress history',
       'View advanced progress charts',
       'Generate formatted health report',
+      'See how each factor influenced your recommendations',
     ],
   },
 ];
