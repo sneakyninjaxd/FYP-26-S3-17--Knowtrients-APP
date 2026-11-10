@@ -1,8 +1,8 @@
 import { useSubscription } from '@/contexts/subscription-context';
 import { api } from '@/services/api';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-/** Shown until the real plans arrive, so the screen isn't blank on open. */
+/** Card order on screen, whatever order the server returns them in. */
 const PLAN_ORDER = ['free', 'premium'];
 
 const CURRENCY_SYMBOLS = { SGD: 'S$', USD: '$', MYR: 'RM', GBP: '£', EUR: '€' };
@@ -75,28 +75,37 @@ export default function Subscription() {
   const [plans, setPlans] = useState([]);
   const [plansError, setPlansError] = useState(null);
 
-  useEffect(() => {
-    let active = true;
+  /**
+   * On focus rather than on mount: the router keeps this screen alive, so a
+   * plan edited while the app is open would otherwise not appear until the
+   * whole tree was torn down — which is to say, until the user logged out.
+   */
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
 
-    api
-      .listPlans()
-      .then((rows) => {
-        if (!active) return;
+      api
+        .listPlans()
+        .then((rows) => {
+          if (!active) return;
 
-        // Free before premium, whatever order the server returns.
-        const sorted = [...rows].sort(
-          (a, b) => PLAN_ORDER.indexOf(a.plan_key) - PLAN_ORDER.indexOf(b.plan_key)
-        );
-        setPlans(sorted);
-      })
-      .catch((err) => {
-        if (active) setPlansError(err?.message ?? 'Could not load the plans.');
-      });
+          // Free before premium, whatever order the server returns.
+          const sorted = [...rows].sort(
+            (a, b) => PLAN_ORDER.indexOf(a.plan_key) - PLAN_ORDER.indexOf(b.plan_key)
+          );
+          setPlans(sorted);
+          setPlansError(null);
+        })
+        .catch((err) => {
+          if (active) setPlansError(err?.message ?? 'Could not load the plans.');
+        });
 
-    return () => {
-      active = false;
-    };
-  }, []);
+      // Stops a slow response from landing after the screen has gone.
+      return () => {
+        active = false;
+      };
+    }, [])
+  );
 
   const [showCheckout, setShowCheckout] = useState(false);
   const [showCancel, setShowCancel] = useState(false);
