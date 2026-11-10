@@ -1,7 +1,8 @@
 import { useSubscription } from '@/contexts/subscription-context';
+import { api } from '@/services/api';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -14,30 +15,32 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-const PLANS = [
-  {
-    id: 'free',
-    name: 'Free Plan',
-    price: null,
-    features: [
-      'View progress history for the last 7 days',
-      'View regular progress charts',
-      'Manual sleep input',
-      'Explanation for each recommendation'
-    ],
-  },
-  {
-    id: 'premium',
-    name: 'Premium Plan',
-    price: '$10/month',
-    features: [
-      'View full progress history',
-      'View advanced progress charts',
-      'Generate formatted health report',
-      'See how each factor influenced your recommendations',
-    ],
-  },
-];
+/** Shown until the real plans arrive, so the screen isn't blank on open. */
+const PLAN_ORDER = ['free', 'premium'];
+
+const CURRENCY_SYMBOLS = { SGD: 'S$', USD: '$', MYR: 'RM', GBP: '£', EUR: '€' };
+
+/**
+ * "S$10/month" from the stored price, currency and billing period.
+ *
+ * The period is a number of days on the server, so 30 and 365 are named
+ * rather than printed as "per 30 days", which reads like a technicality.
+ */
+const formatPrice = (plan) => {
+  if (!plan || !plan.price) return null;
+
+  const symbol = CURRENCY_SYMBOLS[plan.currency] ?? `${plan.currency} `;
+  const amount = Number.isInteger(plan.price) ? plan.price : plan.price.toFixed(2);
+
+  const days = plan.billing_period_days ?? 30;
+  const period =
+    days === 30 || days === 31 ? 'month'
+      : days === 365 ? 'year'
+        : days === 7 ? 'week'
+          : `${days} days`;
+
+  return `${symbol}${amount}/${period}`;
+};
 
 /** Groups digits in fours as the user types: 4111111111111111 → 4111 1111 ... */
 const formatCardNumber = (value) =>
@@ -64,6 +67,36 @@ export default function Subscription() {
     useSubscription();
 
   const currentPlan = isPremium ? 'premium' : 'free';
+
+  /**
+   * Plans come from the database, so a price or feature change made by a
+   * Platform Manager shows here without shipping a new build.
+   */
+  const [plans, setPlans] = useState([]);
+  const [plansError, setPlansError] = useState(null);
+
+  useEffect(() => {
+    let active = true;
+
+    api
+      .listPlans()
+      .then((rows) => {
+        if (!active) return;
+
+        // Free before premium, whatever order the server returns.
+        const sorted = [...rows].sort(
+          (a, b) => PLAN_ORDER.indexOf(a.plan_key) - PLAN_ORDER.indexOf(b.plan_key)
+        );
+        setPlans(sorted);
+      })
+      .catch((err) => {
+        if (active) setPlansError(err?.message ?? 'Could not load the plans.');
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const [showCheckout, setShowCheckout] = useState(false);
   const [showCancel, setShowCancel] = useState(false);
@@ -114,6 +147,11 @@ export default function Subscription() {
   const renewsOn = formatDate(subscription?.current_period_end);
   const cancelledOn = formatDate(subscription?.cancelled_at);
 
+  /** For the checkout modal, which quotes the price before you commit. */
+  const premium = plans.find((p) => p.plan_key === 'premium');
+  const premiumPrice = formatPrice(premium);
+  const premiumFeatures = premium?.features ?? [];
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView contentContainerStyle={{ paddingBottom: 30 + insets.bottom }}>
@@ -145,12 +183,25 @@ export default function Subscription() {
           )}
 
           {error && <Text style={styles.error}>{error}</Text>}
+          {plansError && <Text style={styles.error}>{plansError}</Text>}
 
-          {PLANS.map((plan) => {
-            const isCurrent = currentPlan === plan.id;
+          {plans.length === 0 && !plansError && (
+            <ActivityIndicator
+              size="small"
+              color="#4ECBA0"
+              style={{ marginTop: 20 }}
+            />
+          )}
+
+          {plans.map((plan) => {
+            const isCurrent = currentPlan === plan.plan_key;
+            const price = formatPrice(plan);
 
             return (
-              <View key={plan.id} style={[styles.planCard, isCurrent && styles.planCardActive]}>
+              <View
+                key={plan.plan_key}
+                style={[styles.planCard, isCurrent && styles.planCardActive]}
+              >
                 {isCurrent && (
                   <View style={styles.badge}>
                     <Text style={styles.badgeText}>Current</Text>
@@ -159,12 +210,12 @@ export default function Subscription() {
 
                 <Text style={styles.planName}>{plan.name}</Text>
 
-                {plan.features.map((f) => (
+                {(plan.features ?? []).map((f) => (
                   <Text key={f} style={styles.feature}>• {f}</Text>
                 ))}
 
                 {/* What the server actually says about this subscription. */}
-                {isCurrent && plan.id === 'premium' && (
+                {isCurrent && plan.plan_key === 'premium' && (
                   <Text style={styles.periodNote}>
                     {cancelledOn
                       ? `Cancelled ${cancelledOn}. Premium remains active until ${renewsOn ?? 'the end of the period'}.`
@@ -174,9 +225,9 @@ export default function Subscription() {
                   </Text>
                 )}
 
-                {plan.price && (
+                {price && (
                   <View style={styles.priceRow}>
-                    <Text style={styles.price}>{plan.price}</Text>
+                    <Text style={styles.price}>{price}</Text>
                     <TouchableOpacity
                       style={styles.planButton}
                       disabled={isLoading}
@@ -199,7 +250,11 @@ export default function Subscription() {
         <View style={styles.overlay}>
           <ScrollView style={styles.modalCard} contentContainerStyle={{ padding: 24 }}>
             <Text style={styles.modalTitle}>Upgrade to Premium</Text>
-            <Text style={styles.modalSubtitle}>$10 per month, cancel any time</Text>
+            <Text style={styles.modalSubtitle}>
+              {premiumPrice
+                ? `${premiumPrice}, cancel any time`
+                : 'Cancel any time'}
+            </Text>
 
             {/* Says plainly that this is a demonstration, so nobody types a
                 real card number into a student project. */}
@@ -289,9 +344,13 @@ export default function Subscription() {
           <View style={styles.modalCard}>
             <View style={{ padding: 24 }}>
               <Text style={styles.modalTitle}>Cancel Premium?</Text>
+              {/* Names the features the plan actually lists, rather than a
+                  copy that drifts when a Platform Manager edits the plan. */}
               <Text style={styles.modalSubtitle}>
-                You&apos;ll lose access to unlimited recommendations, plain-language
-                explanations and full history
+                You&apos;ll lose access to
+                {premiumFeatures.length
+                  ? ` ${premiumFeatures.join(', ').toLowerCase()}`
+                  : ' the Premium features'}
                 {renewsOn ? ` after ${renewsOn}` : ''}.
               </Text>
 

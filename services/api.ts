@@ -294,6 +294,22 @@ export type SubscriptionResponse = {
   is_premium: boolean;
 };
 
+/**
+ * A plan as the Platform Manager has configured it. Name, price and features
+ * all come from the database, so the subscription screen shows whatever is
+ * currently on offer rather than a copy baked into the app.
+ */
+export type PlanResponse = {
+  plan_key: string;
+  name: string;
+  price: number;
+  currency: string;
+  billing_period_days: number;
+  features: string[];
+  updated_at: string | null;
+  updated_by_name: string | null;
+};
+
 // ---------------------------------------------------------------------------
 // Support
 // ---------------------------------------------------------------------------
@@ -803,6 +819,12 @@ export const api = {
   // -------------------------------------------------------------------------
 
   /** The user's real plan. Replaces the old client-side `plan` flag. */
+  /**
+   * The plans on offer. Public — no token — since prices and features are
+   * what someone deciding whether to sign up needs to see.
+   */
+  listPlans: () => request<PlanResponse[]>('/subscription/plans'),
+
   getSubscription: (token: string) =>
     request<SubscriptionResponse>('/subscription', {
       headers: authHeaders(token),
