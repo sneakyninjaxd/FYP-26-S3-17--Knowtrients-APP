@@ -4,6 +4,18 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 
 const FoodContext = createContext(null);
 
+/**
+ * The meal ids in the route are hyphenated, because that reads better in a
+ * URL: /log/foodintake/morning-snack. The API expects underscores and
+ * rejects anything else with a 422.
+ *
+ * Converting here rather than in each screen means a new caller can't forget
+ * to do it. Breakfast, lunch and dinner are unaffected, which is why only the
+ * snacks ever failed.
+ */
+export const toMealType = (meal) =>
+  typeof meal === 'string' ? meal.replace(/-/g, '_') : meal;
+
 export function FoodProvider({ children }) {
   const { token } = useAuth();
 
@@ -25,6 +37,14 @@ export function FoodProvider({ children }) {
    * updateQuantity. A ref, not state, since nothing renders from it.
    */
   const foodIdByLogId = useRef({});
+
+  /**
+   * Quantity edits are create-then-delete, so the row's id changes with every
+   * step. A second tap arriving before React re-renders still holds the old
+   * id and tries to delete a row that is already gone — "Log entry not
+   * found". A ref updates immediately, which is what the guard needs.
+   */
+  const editingLogs = useRef(new Set());
 
   const loadEntries = useCallback(
     async (date = activeDate) => {
@@ -92,7 +112,7 @@ export function FoodProvider({ children }) {
 
       try {
         const created = await api.createFoodLog(token, {
-          meal_type: meal,
+          meal_type: toMealType(meal),
           log_date: activeDate,
           food_name: name,
           quantity,
@@ -135,7 +155,7 @@ export function FoodProvider({ children }) {
 
     try {
       const created = await api.createFoodLog(token, {
-        meal_type: meal,
+        meal_type: toMealType(meal),
         log_date: activeDate,
         food_id: food.id,
         quantity,
@@ -169,45 +189,95 @@ export function FoodProvider({ children }) {
     }
   };
 
+  /** The nutrition fields a log row carries, for rescaling a portion. */
+  const NUTRIENT_KEYS = [
+    'calories',
+    'protein_g',
+    'carbs_g',
+    'fat_g',
+    'saturated_fat_g',
+    'fiber_g',
+    'sugar_g',
+    'sodium_mg',
+  ];
+
   /**
    * No PUT endpoint, so this is create-then-delete: the replacement is made
    * first, and the old row is only removed once it succeeds. Doing it the
    * other way round loses the entry entirely if the create fails.
    *
-   * Requires knowing the original food_id, which the API doesn't return, so
-   * this only works for entries added during this session. Adding food_id to
-   * FoodLogResponse on the backend would remove the limitation.
+   * Two routes to the replacement:
+   *
+   *  - With the original food_id, the server recomputes nutrition from the
+   *    portion, which is the authoritative answer.
+   *  - Without it — any entry not added in this session, since the API
+   *    doesn't return food_id — the stored values are rescaled by the ratio
+   *    of new to old quantity. Portion nutrition is linear, so this lands on
+   *    the same numbers; it just can't be re-derived from the catalogue
+   *    later. Adding food_id to FoodLogResponse would make the first route
+   *    always available.
    */
   const updateQuantity = async (logId, quantity) => {
     if (!token || quantity <= 0 || quantity > 100) return;
 
+    if (editingLogs.current.has(logId)) return;
+
     const entry = entries.find((e) => e.id === logId);
     if (!entry) return;
 
+    editingLogs.current.add(logId);
+
     const foodId = foodIdByLogId.current[logId];
-    if (!foodId) {
-      console.warn('Quantity edit unavailable: original food_id unknown for log', logId);
-      return;
-    }
+
+    const payload = foodId
+      ? {
+          meal_type: entry.meal_type,
+          log_date: entry.log_date,
+          food_id: foodId,
+          quantity,
+          unit: entry.unit,
+        }
+      : (() => {
+          const previous = entry.quantity > 0 ? entry.quantity : 1;
+          const factor = quantity / previous;
+
+          const scaled = {};
+          for (const key of NUTRIENT_KEYS) {
+            const value = Number(entry[key]);
+            if (Number.isFinite(value)) {
+              scaled[key] = Math.round(value * factor * 100) / 100;
+            }
+          }
+
+          return {
+            meal_type: entry.meal_type,
+            log_date: entry.log_date,
+            food_name: entry.food_name,
+            quantity,
+            unit: entry.unit,
+            ...scaled,
+          };
+        })();
 
     try {
-      const created = await api.createFoodLog(token, {
-        meal_type: entry.meal_type,
-        log_date: entry.log_date,
-        food_id: foodId,
-        quantity,
-        unit: entry.unit,
-      });
+      const created = await api.createFoodLog(token, payload);
       await api.deleteFoodLog(token, logId);
 
-      foodIdByLogId.current[created.id] = foodId;
-      delete foodIdByLogId.current[logId];
+      if (foodId) {
+        foodIdByLogId.current[created.id] = foodId;
+        delete foodIdByLogId.current[logId];
+      }
+
       setEntries((prev) => prev.map((e) => (e.id === logId ? created : e)));
       loadSummary(entry.log_date);
     } catch (err) {
+      // Refetch rather than guess: the create may have succeeded before the
+      // delete failed, which would otherwise leave a duplicate on screen.
       console.warn('Could not update quantity', err);
       loadEntries(entry.log_date);
       loadSummary(entry.log_date);
+    } finally {
+      editingLogs.current.delete(logId);
     }
   };
 

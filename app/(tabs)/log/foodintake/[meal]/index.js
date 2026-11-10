@@ -1,4 +1,4 @@
-import { useFood } from '@/contexts/food-context';
+import { toMealType, useFood } from '@/contexts/food-context';
 import { toLogDate } from '@/services/api';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
@@ -58,7 +58,8 @@ export default function MealLog() {
    * the portion — don't multiply by quantity again.
    */
   const items = useMemo(
-    () => entries.filter((e) => e.meal_type === meal),
+    // The route id is hyphenated, the stored meal_type is underscored.
+    () => entries.filter((e) => e.meal_type === toMealType(meal)),
     [entries, meal]
   );
 

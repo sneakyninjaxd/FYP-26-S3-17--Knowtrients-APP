@@ -1,4 +1,4 @@
-import { useFood } from '@/contexts/food-context';
+import { toMealType, useFood } from '@/contexts/food-context';
 import { useProfile } from '@/contexts/profile-context';
 import { toLogDate } from '@/services/api';
 import { dailyGoals } from '@/src/goals';
@@ -82,7 +82,8 @@ export default function FoodLog() {
   const mealStats = useMemo(() => {
     const byType = new Map((summary?.meals ?? []).map((m) => [m.meal_type, m]));
     return MEALS.map((meal) => {
-      const row = byType.get(meal.id);
+      // MEALS ids are hyphenated for the route; the API returns underscores.
+      const row = byType.get(toMealType(meal.id));
       return {
         ...meal,
         items: row?.item_count ?? 0,
