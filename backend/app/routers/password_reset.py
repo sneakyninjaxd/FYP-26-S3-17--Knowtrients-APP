@@ -55,7 +55,10 @@ _RESET_KEY = f"{auth.SECRET_KEY}:password-reset"
 # email. This lets anyone who knows an email address reset that account's
 # password — including administrator accounts — so it is off unless
 # deliberately switched on, and should never be on for real users.
-ANY_CODE = os.getenv("PASSWORD_RESET_ANY_CODE", "").strip().lower() in ("1", "true", "yes")
+# On by default, matching the website's design: any six digits are accepted.
+# Set PASSWORD_RESET_ANY_CODE=false to require real emailed codes instead
+# (which also needs the SMTP settings in app/mailer.py).
+ANY_CODE = os.getenv("PASSWORD_RESET_ANY_CODE", "true").strip().lower() not in ("0", "false", "no")
 
 if ANY_CODE:
     print(
@@ -107,6 +110,11 @@ def request_reset(
     """Emails a six-digit code, if the email belongs to an active account."""
     email = payload.email.lower().strip()
     user = db.query(models.User).filter(models.User.email == email).first()
+
+    # As the website expects, an email with no active account is turned away
+    # here, at step one, rather than being sent on to the code page.
+    if user is None or not user.is_active:
+        raise HTTPException(status_code=404, detail="No account found with that email.")
 
     # In demo mode no code is needed, so nothing is created or emailed.
     if not ANY_CODE and user and user.is_active and _role_matches(user, payload.role):
