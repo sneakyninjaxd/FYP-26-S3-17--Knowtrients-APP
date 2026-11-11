@@ -336,6 +336,7 @@ class AdminAccountRow(BaseModel):
     subscription_plan: str | None = None
     subscription_renews_at: datetime | None = None
     subscription_ended_at: datetime | None = None
+    subscription_cancels_at: datetime | None = None   # cancelled, ends on this date
 
 
 class AdminAccountDetail(AdminAccountRow):
@@ -638,6 +639,9 @@ class SubscriptionResponse(BaseModel):
     current_period_end: datetime | None = None
     cancelled_at: datetime | None = None
     is_premium: bool = False
+    # True once a paid subscription has been cancelled but is still running
+    # until current_period_end, when it ends.
+    cancels_at_period_end: bool = False
 
 
 # ---------------------------------------------------------------------------

@@ -37,6 +37,8 @@ from sqlalchemy.engine import Engine
 # SQLite — BOOLEAN, INTEGER, TEXT, VARCHAR, FLOAT and TIMESTAMP all are.
 ADDITIVE_COLUMNS: list[tuple[str, str, str]] = [
     ("subscriptions", "price", "FLOAT"),
+    ("subscriptions", "stripe_customer_id", "VARCHAR(255)"),
+    ("subscriptions", "stripe_subscription_id", "VARCHAR(255)"),
     ("support_requests", "support_type", "VARCHAR(20)"),
     ("support_requests", "is_persisting", "BOOLEAN"),
     ("support_requests", "last_message_at", "TIMESTAMP"),

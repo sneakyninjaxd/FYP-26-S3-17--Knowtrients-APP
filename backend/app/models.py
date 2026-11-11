@@ -594,6 +594,12 @@ class Subscription(Base):
     # to. Added after the table existed, so created by schema_upgrades.
     price = Column(Float, nullable=True)
 
+    # Stripe's identifiers, linking this row to the customer and subscription
+    # in Stripe. No card or bank details are stored here or anywhere in this
+    # database — Stripe holds those (C-09). Added via schema_upgrades.
+    stripe_customer_id = Column(String, nullable=True, index=True)
+    stripe_subscription_id = Column(String, nullable=True, index=True)
+
     created_at = Column(DateTime(timezone=True), default=utcnow)
     updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 

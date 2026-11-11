@@ -10,6 +10,7 @@ from .database import engine
 from .routers import (
     admin,
     auth_routes,
+    billing,
     fitness,
     im,
     logs,
@@ -144,6 +145,7 @@ app.include_router(subscription.router)
 app.include_router(satisfaction.router)
 app.include_router(im.router)
 app.include_router(plans.router)
+app.include_router(billing.router)
 app.include_router(password_reset.router)
 
 

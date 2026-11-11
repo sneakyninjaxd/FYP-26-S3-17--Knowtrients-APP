@@ -11,6 +11,7 @@ and on every other device. It now lives in the `subscriptions` table and is
 returned on the profile, where the app already looks for it.
 """
 
+import os
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -103,6 +104,7 @@ def _response(subscription: models.Subscription | None) -> schemas.SubscriptionR
         current_period_end=subscription.current_period_end,
         cancelled_at=subscription.cancelled_at,
         is_premium=plan == "premium",
+        cancels_at_period_end=plan == "premium" and subscription.cancelled_at is not None,
     )
 
 
@@ -140,6 +142,16 @@ def upgrade(
     request carries no body at all, so there is nothing that could be
     mistaken for payment data.
     """
+    # With Stripe configured, Premium only comes from a verified payment.
+    # Leaving this open would make paying optional.
+    from .billing import stripe_configured
+
+    if stripe_configured():
+        raise HTTPException(
+            status_code=409,
+            detail="Premium is purchased through checkout: POST /subscription/checkout.",
+        )
+
     subscription = get_subscription(db, current_user.id)
 
     if effective_plan(subscription) == "premium":
@@ -184,6 +196,28 @@ def cancel(
     if effective_plan(subscription) != "premium":
         raise HTTPException(status_code=400, detail="You are not on Premium")
 
+    # A paid subscription is cancelled in Stripe, at the end of the period
+    # already paid for. Premium continues until then; Stripe's
+    # customer.subscription.deleted webhook ends it on that date.
+    from .billing import stripe_configured
+
+    if subscription.stripe_subscription_id and stripe_configured():
+        import stripe
+
+        stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
+        try:
+            stripe.Subscription.modify(
+                subscription.stripe_subscription_id, cancel_at_period_end=True
+            )
+        except stripe.StripeError as exc:
+            print(f"[stripe] cancel failed for user {current_user.id}: {exc}")
+            raise HTTPException(status_code=502, detail="Couldn't cancel right now. Please try again.")
+        subscription.cancelled_at = subscription.cancelled_at or models.utcnow()
+        db.commit()
+        db.refresh(subscription)
+        return _response(subscription)
+
+    # Without Stripe (local testing), cancelling takes effect immediately.
     subscription.plan = "free"
     subscription.status = "cancelled"
     subscription.cancelled_at = models.utcnow()

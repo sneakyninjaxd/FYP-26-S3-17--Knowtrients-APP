@@ -66,7 +66,17 @@ def _row(user: models.User, subscription=None, plan_names: dict | None = None) -
             ended = None
         sub_fields = dict(
             subscription_plan=plan,
-            subscription_renews_at=subscription.current_period_end if status == "active" else None,
+            subscription_renews_at=(
+                subscription.current_period_end
+                if status == "active" and subscription.cancelled_at is None
+                else None
+            ),
+            # Cancelled but paid up: Premium runs until this date, then ends.
+            subscription_cancels_at=(
+                subscription.current_period_end
+                if status == "active" and subscription.cancelled_at is not None
+                else None
+            ),
             subscription_ended_at=ended,
             plan=plan,
             plan_name=(plan_names or {}).get(plan, plan.title()),
