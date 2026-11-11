@@ -115,6 +115,16 @@ class User(Base):
     # Administrative state (supports the suspend/reactivate admin functions).
     is_active = Column(Boolean, nullable=False, default=True)
 
+    # Whether the user has confirmed their email with the code sent at sign-up.
+    # Null for accounts that existed before verification was introduced —
+    # treated as verified, so no existing user is locked out. Added via
+    # schema_upgrades.
+    email_verified = Column(Boolean, nullable=True)
+
+    @property
+    def is_email_verified(self) -> bool:
+        return self.email_verified is not False
+
     # Role rather than a boolean: the admin website distinguishes Account
     # Administrators from Platform Administrators, and they have different
     # permissions. See ROLES.
@@ -911,6 +921,28 @@ class PasswordResetCode(Base):
     """
 
     __tablename__ = "password_reset_codes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), unique=True, nullable=False
+    )
+    code_hash = Column(String, nullable=False)
+    attempts = Column(Integer, nullable=False, default=0)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utcnow)
+
+
+
+class EmailVerificationCode(Base):
+    """
+    The six-digit code emailed at sign-up to confirm the address.
+
+    Same safeguards as password reset codes: only a keyed hash is stored, it
+    expires, it allows a limited number of guesses, and a new one replaces
+    the old.
+    """
+
+    __tablename__ = "email_verification_codes"
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(

@@ -36,6 +36,7 @@ from sqlalchemy.engine import Engine
 # (table, column, SQL type). Types must be valid in both PostgreSQL and
 # SQLite — BOOLEAN, INTEGER, TEXT, VARCHAR, FLOAT and TIMESTAMP all are.
 ADDITIVE_COLUMNS: list[tuple[str, str, str]] = [
+    ("users", "email_verified", "BOOLEAN"),
     ("subscriptions", "price", "FLOAT"),
     ("subscriptions", "stripe_customer_id", "VARCHAR(255)"),
     ("subscriptions", "stripe_subscription_id", "VARCHAR(255)"),

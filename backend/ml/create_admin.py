@@ -73,6 +73,7 @@ def create(email: str, password: str, first: str, last: str, role: str) -> None:
             last_name=last.strip(),
             hashed_password=auth.hash_password(password),
             role=role,
+            email_verified=True,
             is_active=True,
         )
         db.add(user)

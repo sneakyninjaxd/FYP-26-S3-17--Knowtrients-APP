@@ -198,6 +198,7 @@ def create_staff_account(
         hashed_password=auth.hash_password(payload.password),
         role=payload.role,
         is_active=True,
+        email_verified=True,   # created by an administrator, not signed up
     )
     db.add(user)
     db.flush()

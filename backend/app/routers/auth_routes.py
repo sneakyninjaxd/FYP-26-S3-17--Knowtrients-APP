@@ -1,6 +1,6 @@
 """Account creation, login, and the current-user endpoint."""
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
@@ -9,6 +9,57 @@ from ..database import get_db
 from ..deps import get_current_user
 
 router = APIRouter(tags=["auth"])
+
+
+def _signed_up(db: Session, user: models.User, background: BackgroundTasks):
+    """
+    What sign-up returns. With verification on, the account starts unverified,
+    a code is emailed, and the user is sent to the code screen rather than
+    logged in. With it off, they're logged in straight away, as before.
+    """
+    from .email_verification import send_code, verification_required
+
+    if verification_required():
+        send_code(db, user, background, force=True)
+        return {
+            "verification_required": True,
+            "email": user.email,
+            "message": "We've emailed you a 6-digit code. Enter it to verify your account.",
+        }
+    user.email_verified = True
+    db.commit()
+    token = auth.create_access_token(data={"sub": str(user.id)})
+    return schemas.TokenResponse(access_token=token, user=_user_response(user)).model_dump()
+
+
+def _existing_account(db: Session, email: str):
+    """An account already using this email, if any."""
+    return db.query(models.User).filter(models.User.email == email).first()
+
+
+def _taken(user: models.User, status_code: int):
+    """
+    Refuses a duplicate sign-up. If the earlier sign-up was never verified,
+    say so, so the user goes to verify it rather than thinking the email is
+    someone else's.
+    """
+    if not user.is_email_verified:
+        raise HTTPException(
+            status_code=status_code,
+            detail="This email is registered but not verified yet. Check your inbox for the code, or request a new one.",
+            headers={"X-Error-Code": "email_not_verified"},
+        )
+    raise HTTPException(status_code=status_code, detail="An account with this email already exists.")
+
+
+def _refuse_unverified(user: models.User):
+    """Login is refused until the email is verified. Staff are exempt."""
+    if user.role == models.ROLE_USER and not user.is_email_verified:
+        raise HTTPException(
+            status_code=403,
+            detail="Please verify your email before logging in. We've sent a 6-digit code to your inbox.",
+            headers={"X-Error-Code": "email_not_verified"},
+        )
 
 
 def assign_display_id(db: Session, user: models.User) -> None:
@@ -48,13 +99,24 @@ def _user_response(user: models.User) -> schemas.UserResponse:
     )
 
 
-@router.post("/signup", response_model=schemas.TokenResponse, status_code=status.HTTP_201_CREATED)
-def create_account(payload: schemas.CreateAccountRequest, db: Session = Depends(get_db)):
-    """Handles the Create Account screen."""
+@router.post("/signup", status_code=status.HTTP_201_CREATED)
+def create_account(
+    payload: schemas.CreateAccountRequest,
+    background: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    """
+    Handles the app's Create Account screen.
+
+    With email verification on (the default), returns
+    {"verification_required": true, "email": ...} and emails a code; the app
+    then calls POST /verify-email. With it off, returns a login token as before.
+    """
     email = payload.email.lower().strip()
 
-    if db.query(models.User).filter(models.User.email == email).first():
-        raise HTTPException(status_code=400, detail="An account with this email already exists")
+    existing = _existing_account(db, email)
+    if existing:
+        _taken(existing, 400)
 
     new_user = models.User(
         email=email,
@@ -62,14 +124,13 @@ def create_account(payload: schemas.CreateAccountRequest, db: Session = Depends(
         last_name=payload.last_name.strip(),
         hashed_password=auth.hash_password(payload.password),
     )
+    new_user.email_verified = False
     db.add(new_user)
     db.flush()  # assigns the primary key used to build the display id
     assign_display_id(db, new_user)
     db.commit()
     db.refresh(new_user)
-
-    token = auth.create_access_token(data={"sub": str(new_user.id)})
-    return schemas.TokenResponse(access_token=token, user=_user_response(new_user))
+    return _signed_up(db, new_user, background)
 
 
 @router.post("/login", response_model=schemas.TokenResponse)
@@ -87,6 +148,7 @@ def login(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
 
     if not user.is_active:
         raise HTTPException(status_code=403, detail="This account has been suspended")
+    _refuse_unverified(user)
 
     token = auth.create_access_token(data={"sub": str(user.id)})
     return schemas.TokenResponse(access_token=token, user=_user_response(user))
@@ -120,6 +182,7 @@ def token_login(
 
     if not user.is_active:
         raise HTTPException(status_code=403, detail="This account has been suspended")
+    _refuse_unverified(user)
 
     token = auth.create_access_token(data={"sub": str(user.id)})
     return schemas.TokenResponse(access_token=token, user=_user_response(user))
@@ -135,20 +198,24 @@ def read_current_user(current_user: models.User = Depends(get_current_user)):
 # ---------------------------------------------------------------------------
 
 
-@router.post(
-    "/register", response_model=schemas.TokenResponse, status_code=status.HTTP_201_CREATED
-)
-def register(payload: schemas.RegisterRequest, db: Session = Depends(get_db)):
+@router.post("/register", status_code=status.HTTP_201_CREATED)
+def register(
+    payload: schemas.RegisterRequest,
+    background: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
     """
     Public sign-up from the website's register page.
 
     Always creates an ordinary app user — the role is never taken from the
-    request, so nobody can register themselves as an administrator. Returns
-    the same shape as /login, so the page signs the new user straight in.
+    request, so nobody can register themselves as an administrator. With email
+    verification on, returns {"verification_required": true, "email": ...};
+    otherwise the same shape as /login.
     """
     email = payload.email.lower().strip()
-    if db.query(models.User).filter(models.User.email == email).first():
-        raise HTTPException(status_code=409, detail="An account with this email already exists.")
+    existing = _existing_account(db, email)
+    if existing:
+        _taken(existing, 409)
 
     user = models.User(
         email=email,
@@ -156,15 +223,14 @@ def register(payload: schemas.RegisterRequest, db: Session = Depends(get_db)):
         last_name=payload.last_name,
         hashed_password=auth.hash_password(payload.password),
         role=models.ROLE_USER,
+        email_verified=False,
     )
     db.add(user)
     db.flush()
     assign_display_id(db, user)
     db.commit()
     db.refresh(user)
-
-    token = auth.create_access_token(data={"sub": str(user.id)})
-    return schemas.TokenResponse(access_token=token, user=_user_response(user))
+    return _signed_up(db, user, background)
 
 
 @router.patch("/me", response_model=schemas.UserResponse)
