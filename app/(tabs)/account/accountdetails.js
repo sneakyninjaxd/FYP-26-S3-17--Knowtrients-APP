@@ -1,6 +1,10 @@
+import { useAuth } from '@/contexts/auth-context';
+import { api } from '@/services/api';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { useState } from 'react';
 import {
+  ActivityIndicator,
   ScrollView,
   StyleSheet,
   Text,
@@ -12,6 +16,92 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 
 export default function AccountDetailsScreen() {
   const insets = useSafeAreaInsets();
+  const auth = useAuth();
+  const { token, user } = auth;
+
+  // Seeded from the signed-in user, so the fields show what is stored rather
+  // than placeholder text that looks like data.
+  const [firstName, setFirstName] = useState(user?.first_name ?? '');
+  const [lastName, setLastName] = useState(user?.last_name ?? '');
+
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [retypePassword, setRetypePassword] = useState('');
+
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+  const [notice, setNotice] = useState(null);
+
+  const nameChanged =
+    firstName.trim() !== (user?.first_name ?? '') ||
+    lastName.trim() !== (user?.last_name ?? '');
+
+  const wantsPasswordChange =
+    currentPassword.length > 0 || newPassword.length > 0 || retypePassword.length > 0;
+
+  const save = async () => {
+    if (!token || saving) return;
+
+    setError(null);
+    setNotice(null);
+
+    // Validate before sending, so an obvious mistake doesn't need a round trip.
+    if (nameChanged && (!firstName.trim() || !lastName.trim())) {
+      setError('First and last name cannot be empty.');
+      return;
+    }
+
+    if (wantsPasswordChange) {
+      if (!currentPassword) {
+        setError('Enter your current password to set a new one.');
+        return;
+      }
+      if (newPassword.length < 8) {
+        setError('The new password must be at least 8 characters.');
+        return;
+      }
+      if (newPassword !== retypePassword) {
+        setError('The new passwords do not match.');
+        return;
+      }
+    }
+
+    if (!nameChanged && !wantsPasswordChange) {
+      setNotice('Nothing to save.');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      // Name first: if the password change then fails, the user is told, and
+      // the part that succeeded is already stored rather than lost.
+      if (nameChanged) {
+        await api.updateMe(token, {
+          first_name: firstName.trim(),
+          last_name: lastName.trim(),
+        });
+      }
+
+      if (wantsPasswordChange) {
+        await api.changePassword(token, currentPassword, newPassword);
+        setCurrentPassword('');
+        setNewPassword('');
+        setRetypePassword('');
+      }
+
+      // Pull the updated user back into the app if the context offers a way;
+      // without it the new name would only appear after signing in again.
+      if (typeof auth.refreshUser === 'function') {
+        await auth.refreshUser();
+      }
+
+      router.push('/account/account');
+    } catch (err) {
+      setError(err?.message ?? 'Could not save your changes.');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -45,19 +135,20 @@ export default function AccountDetailsScreen() {
           </View>
 
           <Text style={styles.label}>Email</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="example123@gmail.com"
-            placeholderTextColor="#3A5049"
-            autoCapitalize="none"
-            keyboardType="email-address"
-          />
+          {/* Read-only: the email identifies the account and is where a
+              password reset is sent, so it isn't editable. */}
+          <View style={styles.readOnly}>
+            <Text style={styles.readOnlyText}>{user?.email ?? '—'}</Text>
+            <Ionicons name="lock-closed" size={12} color="#3A5049" />
+          </View>
 
           <View style={styles.row}>
             <View style={styles.field}>
               <Text style={styles.label}>First Name</Text>
               <TextInput
                 style={styles.input}
+                value={firstName}
+                onChangeText={setFirstName}
                 placeholder="John"
                 placeholderTextColor="#3A5049"
               />
@@ -67,6 +158,8 @@ export default function AccountDetailsScreen() {
               <Text style={styles.label}>Last Name</Text>
               <TextInput
                 style={styles.input}
+                value={lastName}
+                onChangeText={setLastName}
                 placeholder="Doe"
                 placeholderTextColor="#3A5049"
               />
@@ -89,6 +182,8 @@ export default function AccountDetailsScreen() {
           <TextInput
             secureTextEntry
             style={styles.input}
+            value={currentPassword}
+            onChangeText={setCurrentPassword}
             placeholder="••••••••••"
             placeholderTextColor="#3A5049"
           />
@@ -97,6 +192,8 @@ export default function AccountDetailsScreen() {
           <TextInput
             secureTextEntry
             style={styles.input}
+            value={newPassword}
+            onChangeText={setNewPassword}
             placeholder="At least 8 characters"
             placeholderTextColor="#3A5049"
           />
@@ -105,17 +202,27 @@ export default function AccountDetailsScreen() {
           <TextInput
             secureTextEntry
             style={styles.input}
+            value={retypePassword}
+            onChangeText={setRetypePassword}
             placeholder="••••••••••"
             placeholderTextColor="#3A5049"
           />
         </View>
 
+        {error && <Text style={styles.error}>{error}</Text>}
+        {notice && <Text style={styles.notice}>{notice}</Text>}
+
         {/* Save */}
         <TouchableOpacity
-          style={styles.button}
-          onPress={() => router.push('/account/account')}
+          style={[styles.button, saving && styles.buttonDisabled]}
+          onPress={save}
+          disabled={saving}
         >
-          <Text style={styles.buttonText}>Save Changes</Text>
+          {saving ? (
+            <ActivityIndicator size="small" color="#00382B" />
+          ) : (
+            <Text style={styles.buttonText}>Save Changes</Text>
+          )}
         </TouchableOpacity>
 
       </ScrollView>
@@ -225,9 +332,50 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
 
+  /* A field that is shown but not editable — flatter than an input, so it
+     doesn't invite a tap. */
+  readOnly: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#00100B',
+    borderWidth: 1,
+    borderColor: '#0E2A20',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+
+  readOnlyText: { color: '#60766E', fontSize: 13 },
+
+  fieldHint: {
+    color: '#3A5049',
+    fontSize: 9,
+    lineHeight: 13,
+    marginTop: 6,
+  },
+
   row: { flexDirection: 'row', gap: 12 },
 
   field: { flex: 1 },
+
+  /* Feedback */
+
+  error: {
+    color: '#E07A5F',
+    fontSize: 11,
+    paddingHorizontal: 25,
+    marginTop: 4,
+    marginBottom: 6,
+  },
+
+  notice: {
+    color: '#60766E',
+    fontSize: 11,
+    paddingHorizontal: 25,
+    marginTop: 4,
+    marginBottom: 6,
+  },
 
   /* Save */
 
@@ -239,6 +387,8 @@ const styles = StyleSheet.create({
     marginHorizontal: 25,
     marginTop: 10,
   },
+
+  buttonDisabled: { opacity: 0.6 },
 
   buttonText: {
     color: '#00382B',

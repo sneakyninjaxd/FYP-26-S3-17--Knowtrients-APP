@@ -15,6 +15,8 @@ type AuthContextValue = {
   }) => Promise<AuthResponse>;
   logIn: (data: { email: string; password: string }) => Promise<AuthResponse>;
   logOut: () => Promise<void>;
+  /** Re-reads the signed-in user from the server. */
+  refreshUser: () => Promise<ApiUser | null>;
 };
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
@@ -77,8 +79,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }
 
+  /**
+   * Re-reads the user after something changes them server-side — a renamed
+   * account, say. Without this the old name stays on screen until the next
+   * sign-in, because `user` is only set at login and at start-up.
+   *
+   * A failure is deliberately swallowed: this is a refresh, not an
+   * authentication step, and signing someone out because one request didn't
+   * land would be a worse outcome than showing a slightly stale name.
+   */
+  async function refreshUser() {
+    if (!token) return null;
+    try {
+      const me = await api.getMe(token);
+      setUser(me);
+      return me;
+    } catch {
+      return null;
+    }
+  }
+
   return (
-    <AuthContext.Provider value={{ user, token, isLoading, signUp, logIn, logOut }}>
+    <AuthContext.Provider
+      value={{ user, token, isLoading, signUp, logIn, logOut, refreshUser }}
+    >
       {children}
     </AuthContext.Provider>
   );
@@ -91,4 +115,3 @@ export function useAuth(): AuthContextValue {
 }
 
 export { ApiError };
-

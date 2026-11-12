@@ -55,22 +55,17 @@ export default function FoodLog() {
   const { profile } = useProfile();
 
   /**
-   * The day being viewed. Meals are logged against this, so a meal missed at
-   * the time can be filled in later — the same idea as the calendar on My
-   * Sleep. The provider holds it as `activeDate`, which is what addEntry
-   * posts against, so loading a date here is what makes the rest follow.
+   * The day being viewed. Meals are logged against this
    */
   const [date, setDate] = useState(new Date());
   const [showPicker, setShowPicker] = useState(false);
 
   const key = toLogDate(date);
 
-  // Refetch on focus so returning from the add screen shows the new entry.
   useFocusEffect(
     useCallback(() => {
       loadSummary(key);
       loadEntries(key);
-      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [key])
   );
 
@@ -82,7 +77,6 @@ export default function FoodLog() {
   const mealStats = useMemo(() => {
     const byType = new Map((summary?.meals ?? []).map((m) => [m.meal_type, m]));
     return MEALS.map((meal) => {
-      // MEALS ids are hyphenated for the route; the API returns underscores.
       const row = byType.get(toMealType(meal.id));
       return {
         ...meal,

@@ -12,7 +12,7 @@
     "ios": {
       "supportsTablet": true
     },
-        "android": {
+    "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#48DDB0"
@@ -53,7 +53,8 @@
           }
         }
       ],
-      "expo-sharing"
+      "expo-sharing",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true,

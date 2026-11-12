@@ -40,11 +40,6 @@ export default function MealLog() {
   const key = typeof dateParam === 'string' ? dateParam : toLogDate();
   const date = parseLogDate(key) ?? new Date();
 
-  /**
-   * Loading this date also sets the provider's `activeDate`, which is what
-   * addEntry posts against — so the search screen saves to the right day
-   * without needing to know about it.
-   */
   useFocusEffect(
     useCallback(() => {
       loadEntries(key);
@@ -52,11 +47,7 @@ export default function MealLog() {
     }, [key])
   );
 
-  /**
-   * The provider already holds only the active date's entries, so this just
-   * narrows to the meal. Calories on a log row are the computed total for
-   * the portion — don't multiply by quantity again.
-   */
+
   const items = useMemo(
     // The route id is hyphenated, the stored meal_type is underscored.
     () => entries.filter((e) => e.meal_type === toMealType(meal)),
@@ -171,9 +162,6 @@ export default function MealLog() {
           </TouchableOpacity>
         )}
 
-        {/* Holds the button at the bottom on a short list, and collapses to
-            nothing on a long one — `marginTop: 'auto'` did the first but not
-            the second, so a full list left the button touching Add more. */}
         <View style={styles.spacer} />
 
         {/* Edit / Save */}

@@ -19,8 +19,6 @@ import Svg, { Circle } from 'react-native-svg';
 
 /**
  * Calories are measured against a full-day total now that Health Connect
- * reports TotalCaloriesBurned (which includes resting energy), not the
- * ~500 kcal that suited active-only calories.
  */
 const GOALS = { steps: 10000, calories: 2200, activeTime: 90 };
 
@@ -66,9 +64,7 @@ export default function Activities() {
   const [showPicker, setShowPicker] = useState(false);
 
   /**
-   * Steps and total calories burned from Health Connect. `health` is null
-   * until the first read completes; `healthStatus` distinguishes "no data"
-   * from "no permission" so the empty state can say something useful.
+   * Steps and total calories burned from Health Connect. 
    */
   const [health, setHealth] = useState(null);
   const [healthWeek, setHealthWeek] = useState(null);
@@ -87,21 +83,16 @@ export default function Activities() {
           setHealthWeek(await readWeek(date));
         }
       })();
-      // eslint-disable-next-line react-hooks/exhaustive-deps
+
     }, [date, token])
   );
 
-  /**
-   * Refetch on focus so entries added on the form show up.
-   *
-   * Depends on `date` only: loadActivities and loadWeek change identity on
-   * every context update, so depending on them re-fires this forever.
-   */
+
   useFocusEffect(
     useCallback(() => {
       loadActivities(toLogDate(date));
       loadWeek(toLogDate(date));
-      // eslint-disable-next-line react-hooks/exhaustive-deps
+
     }, [date])
   );
 
@@ -121,8 +112,7 @@ export default function Activities() {
 
   const TODAY = {
     steps: health?.steps ?? 0,
-    // Device total plus anything logged by hand, so gym sessions Health
-    // Connect never saw still count towards the day.
+    // Device total plus anything logged by hand
     calories: deviceCalories + loggedCalories,
     activeTime: Math.round(activeTime),
   };

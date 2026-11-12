@@ -25,7 +25,6 @@ const MEAL_NAMES = {
 
 const TABS = ['Recent', 'My Favourites'];
 
-/** Parses a YYYY-MM-DD param without the UTC shift `new Date(str)` adds. */
 const parseLogDate = (value) => {
   if (typeof value !== 'string') return null;
   const [y, m, d] = value.split('-').map(Number);
@@ -52,13 +51,9 @@ export default function AddFood() {
 
   /**
    * addEntry posts against the provider's activeDate, so make sure it points
-   * at the day we were opened for. Normally the meal screen has already set
-   * it; this covers arriving here by any other route, where a mismatch would
-   * silently file the food under the wrong day.
    */
   useEffect(() => {
     if (activeDate !== key) loadEntries(key);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, activeDate]);
 
   const [query, setQuery] = useState('');
@@ -70,7 +65,6 @@ export default function AddFood() {
 
   const searching = query.trim().length > 0;
 
-  /** Guards against an earlier request resolving after a later one. */
   const requestId = useRef(0);
 
   useEffect(() => {
@@ -90,7 +84,7 @@ export default function AddFood() {
     const timer = setTimeout(async () => {
       try {
         const data = await searchFoods(q);
-        if (id !== requestId.current) return;   // a newer keystroke won
+        if (id !== requestId.current) return;   
         setResults(data);
       } catch (err) {
         if (id !== requestId.current) return;
@@ -106,8 +100,7 @@ export default function AddFood() {
 
   /**
    * Log rows aren't catalogue foods — they have no id to favourite and their
-   * calories are already scaled to the portion. Shaped here so one row
-   * component can render both, with `log` marking the difference.
+   * calories are already scaled to the portion.
    */
   const recent = useMemo(() => {
     const seen = new Set();
@@ -167,8 +160,6 @@ export default function AddFood() {
       if (item.food) {
         await addEntry({ meal, food: item.food, quantity: 1 });
       } else {
-        // Re-logging a previous entry: copy its values as a custom entry,
-        // since the catalogue id isn't stored on the log row.
         const l = item.log;
         await addEntry({
           meal,

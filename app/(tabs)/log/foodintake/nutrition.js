@@ -23,14 +23,6 @@ const ZONES = [
   { key: 'high', label: 'High Intake', color: '#D9433F' },
 ];
 
-/**
- * There's no range endpoint for daily summaries, so this screen fetches one
- * request per day. Past Year would be 365 parallel requests on every focus,
- * so the sample is capped — a month of real days is enough for an average,
- * and the line under the picker says what it actually covered.
- *
- * Worth replacing with a single `/logs/summary/range` call if one is added.
- */
 const MAX_SAMPLE_DAYS = 30;
 
 /** Dates for the last N days, newest first. */
@@ -63,9 +55,7 @@ export default function NutritionSummary() {
   const [error, setError] = useState(null);
 
   /**
-   * Averages the daily totals across the range. Days with nothing logged are
-   * left out rather than counted as zero — averaging in a day the user never
-   * opened the app would understate every nutrient.
+   * Averages the daily totals across the range. 
    */
   const load = useCallback(
     async (r) => {

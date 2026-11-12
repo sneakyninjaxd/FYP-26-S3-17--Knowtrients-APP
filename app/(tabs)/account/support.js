@@ -2,7 +2,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { api } from '@/services/api';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   ScrollView,
@@ -21,6 +21,23 @@ const STATUS_STYLE = {
 };
 
 const FALLBACK_STATUS = STATUS_STYLE.unresolved;
+
+/**
+ * `in_progress` sits with Ongoing rather than getting a tab of its own —
+ * from the user's side both mean "still waiting on them", and three tabs
+ * for what is usually a handful of requests is more work than it saves.
+ */
+const FILTERS = [
+  { id: 'all', label: 'All' },
+  { id: 'ongoing', label: 'Ongoing' },
+  { id: 'resolved', label: 'Resolved' },
+];
+
+const matchesFilter = (request, filter) => {
+  if (filter === 'all') return true;
+  if (filter === 'resolved') return request.status === 'resolved';
+  return request.status !== 'resolved';
+};
 
 const formatWhen = (iso) => {
   if (!iso) return '';
@@ -42,8 +59,17 @@ export default function HelpSupport() {
   const { token } = useAuth();
 
   const [requests, setRequests] = useState([]);
+  const [filter, setFilter] = useState('all');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  const visible = useMemo(
+    () => requests.filter((r) => matchesFilter(r, filter)),
+    [requests, filter]
+  );
+
+  /** Counts come from the whole list, so a tab shows what it would reveal. */
+  const countFor = (id) => requests.filter((r) => matchesFilter(r, id)).length;
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -105,6 +131,29 @@ export default function HelpSupport() {
 
         <Text style={styles.sectionLabel}>Previous Requests</Text>
 
+        {/* Hidden until there is something to filter — two tabs over one
+            request is noise, not a control. */}
+        {requests.length > 1 && (
+          <View style={styles.filterRow}>
+            {FILTERS.map((f) => {
+              const active = filter === f.id;
+              return (
+                <TouchableOpacity
+                  key={f.id}
+                  style={active ? styles.filterChipActive : styles.filterChip}
+                  onPress={() => setFilter(f.id)}
+                  accessibilityRole="tab"
+                  accessibilityState={{ selected: active }}
+                >
+                  <Text style={active ? styles.filterTextActive : styles.filterText}>
+                    {f.label} {countFor(f.id)}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
+
         {isLoading && requests.length === 0 && (
           <ActivityIndicator size="small" color="#4ECBA0" style={{ marginTop: 20 }} />
         )}
@@ -117,9 +166,19 @@ export default function HelpSupport() {
           </Text>
         )}
 
-        {requests.length > 0 && (
+        {/* Requests exist, but none in this tab — says which, so the screen
+            doesn't read as empty when it isn't. */}
+        {!isLoading && !error && requests.length > 0 && visible.length === 0 && (
+          <Text style={styles.empty}>
+            {filter === 'resolved'
+              ? 'Nothing resolved yet.'
+              : 'Nothing ongoing — every request has been resolved.'}
+          </Text>
+        )}
+
+        {visible.length > 0 && (
           <View style={styles.listCard}>
-            {requests.map((r, i) => {
+            {visible.map((r, i) => {
               const status = STATUS_STYLE[r.status] ?? FALLBACK_STATUS;
               const unread = r.unread_count ?? 0;
               const replies = r.message_count ?? 0;
@@ -250,6 +309,33 @@ const styles = StyleSheet.create({
     paddingHorizontal: 25,
     marginBottom: 10,
   },
+
+  filterRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: 25,
+    marginBottom: 12,
+  },
+
+  filterChip: {
+    borderWidth: 1,
+    borderColor: '#123B2F',
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+  },
+
+  filterChipActive: {
+    borderWidth: 1,
+    borderColor: '#48DDB0',
+    backgroundColor: '#0E2A20',
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+  },
+
+  filterText: { color: '#60766E', fontSize: 11 },
+  filterTextActive: { color: '#48DDB0', fontSize: 11, fontWeight: '600' },
 
   listCard: {
     borderWidth: 1,

@@ -1,7 +1,9 @@
+import { useAuth } from '@/contexts/auth-context';
 import { useSubscription } from '@/contexts/subscription-context';
 import { api } from '@/services/api';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
+import * as WebBrowser from 'expo-web-browser';
 import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
@@ -9,7 +11,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View
 } from 'react-native';
@@ -42,14 +43,11 @@ const formatPrice = (plan) => {
   return `${symbol}${amount}/${period}`;
 };
 
-/** Groups digits in fours as the user types: 4111111111111111 → 4111 1111 ... */
-const formatCardNumber = (value) =>
-  value.replace(/\D/g, '').slice(0, 16).replace(/(.{4})/g, '$1 ').trim();
-
-const formatExpiry = (value) => {
-  const digits = value.replace(/\D/g, '').slice(0, 4);
-  return digits.length > 2 ? `${digits.slice(0, 2)}/${digits.slice(2)}` : digits;
-};
+/**
+ * Where Stripe sends the browser back to. Matches the `scheme` in app.json,
+ * so the hosted page hands control to the app rather than a web page.
+ */
+const RETURN_URL = 'knowtrients://subscription';
 
 /** "3 November 2026" — for the renewal line. */
 const formatDate = (iso) => {
@@ -63,8 +61,12 @@ const formatDate = (iso) => {
 
 export default function Subscription() {
   const insets = useSafeAreaInsets();
-  const { subscription, isPremium, isLoading, error, upgrade, cancel } =
+  const { token } = useAuth();
+  const { subscription, isPremium, isLoading, error, cancel, refresh } =
     useSubscription();
+
+  /** Checkout can fail before the browser ever opens — say so here. */
+  const [checkoutError, setCheckoutError] = useState(null);
 
   const currentPlan = isPremium ? 'premium' : 'free';
 
@@ -107,42 +109,33 @@ export default function Subscription() {
     }, [])
   );
 
-  const [showCheckout, setShowCheckout] = useState(false);
   const [showCancel, setShowCancel] = useState(false);
   const [processing, setProcessing] = useState(false);
 
-  const [cardName, setCardName] = useState('');
-  const [cardNumber, setCardNumber] = useState('');
-  const [expiry, setExpiry] = useState('');
-  const [cvv, setCvv] = useState('');
-
-  const openCheckout = () => {
-    setCardName('');
-    setCardNumber('');
-    setExpiry('');
-    setCvv('');
-    setShowCheckout(true);
-  };
-
-  const canPay =
-    cardName.trim().length > 1 &&
-    cardNumber.replace(/\s/g, '').length === 16 &&
-    expiry.length === 5 &&
-    cvv.length >= 3;
-
   /**
-   * The card fields are a demonstration of the checkout flow only. Nothing
-   * typed into them is sent anywhere — the upgrade request carries no body
-   * at all, so there is nothing that could be mistaken for payment data.
+   * Payment happens on Stripe's own page, so no card details pass through
+   * the app or our server.
+   *
+   * When the browser closes we only refetch — premium is granted by Stripe's
+   * signed webhook, not by the user arriving back here. If the webhook is
+   * still in flight the plan will read as free for a moment; the refetch on
+   * focus catches up.
    */
-  const confirmPayment = async () => {
-    if (!canPay || processing) return;
+  const startCheckout = async () => {
+    if (!token || processing) return;
 
     setProcessing(true);
-    const ok = await upgrade();
-    setProcessing(false);
+    setCheckoutError(null);
 
-    if (ok) setShowCheckout(false);
+    try {
+      const { url } = await api.createCheckout(token);
+      await WebBrowser.openAuthSessionAsync(url, RETURN_URL);
+      await refresh();
+    } catch (err) {
+      setCheckoutError(err?.message ?? 'Could not start checkout. Please try again.');
+    } finally {
+      setProcessing(false);
+    }
   };
 
   const confirmCancel = async () => {
@@ -193,6 +186,7 @@ export default function Subscription() {
 
           {error && <Text style={styles.error}>{error}</Text>}
           {plansError && <Text style={styles.error}>{plansError}</Text>}
+          {checkoutError && <Text style={styles.error}>{checkoutError}</Text>}
 
           {plans.length === 0 && !plansError && (
             <ActivityIndicator
@@ -223,7 +217,7 @@ export default function Subscription() {
                   <Text key={f} style={styles.feature}>• {f}</Text>
                 ))}
 
-                {/* What the server actually says about this subscription. */}
+                {/* What the db actually says about this subscription. */}
                 {isCurrent && plan.plan_key === 'premium' && (
                   <Text style={styles.periodNote}>
                     {cancelledOn
@@ -239,11 +233,15 @@ export default function Subscription() {
                     <Text style={styles.price}>{price}</Text>
                     <TouchableOpacity
                       style={styles.planButton}
-                      disabled={isLoading}
-                      onPress={isCurrent ? () => setShowCancel(true) : openCheckout}
+                      disabled={isLoading || processing}
+                      onPress={isCurrent ? () => setShowCancel(true) : startCheckout}
                     >
                       <Text style={styles.planButtonText}>
-                        {isCurrent ? 'Cancel Subscription' : 'Get Premium'}
+                        {isCurrent
+                          ? 'Cancel Subscription'
+                          : processing
+                            ? 'Opening…'
+                            : 'Get Premium'}
                       </Text>
                     </TouchableOpacity>
                   </View>
@@ -254,107 +252,12 @@ export default function Subscription() {
         </View>
       </ScrollView>
 
-      {/* Checkout modal */}
-      <Modal visible={showCheckout} transparent animationType="fade">
-        <View style={styles.overlay}>
-          <ScrollView style={styles.modalCard} contentContainerStyle={{ padding: 24 }}>
-            <Text style={styles.modalTitle}>Upgrade to Premium</Text>
-            <Text style={styles.modalSubtitle}>
-              {premiumPrice
-                ? `${premiumPrice}, cancel any time`
-                : 'Cancel any time'}
-            </Text>
-
-            {/* Says plainly that this is a demonstration, so nobody types a
-                real card number into a student project. */}
-            <View style={styles.demoNotice}>
-              <Ionicons name="information-circle-outline" size={16} color="#E0A33F" />
-              <Text style={styles.demoText}>
-                Demonstration only. No payment is taken and nothing you type
-                here is sent or stored. Please don&apos;t enter real card
-                details — use 4111 1111 1111 1111.
-              </Text>
-            </View>
-
-            <Text style={styles.fieldLabel}>Name on card</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="John Doe"
-              placeholderTextColor="#60766E"
-              value={cardName}
-              onChangeText={setCardName}
-            />
-
-            <Text style={styles.fieldLabel}>Card number</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="4111 1111 1111 1111"
-              placeholderTextColor="#60766E"
-              keyboardType="number-pad"
-              value={cardNumber}
-              onChangeText={(v) => setCardNumber(formatCardNumber(v))}
-            />
-
-            <View style={styles.row}>
-              <View style={styles.field}>
-                <Text style={styles.fieldLabel}>Expiry</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="MM/YY"
-                  placeholderTextColor="#60766E"
-                  keyboardType="number-pad"
-                  value={expiry}
-                  onChangeText={(v) => setExpiry(formatExpiry(v))}
-                />
-              </View>
-
-              <View style={styles.field}>
-                <Text style={styles.fieldLabel}>CVV</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="123"
-                  placeholderTextColor="#60766E"
-                  keyboardType="number-pad"
-                  maxLength={4}
-                  value={cvv}
-                  onChangeText={(v) => setCvv(v.replace(/\D/g, ''))}
-                />
-              </View>
-            </View>
-
-            {error && <Text style={styles.error}>{error}</Text>}
-
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={styles.cancelButton}
-                disabled={processing}
-                onPress={() => setShowCheckout(false)}
-              >
-                <Text style={styles.cancelText}>Cancel</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={canPay && !processing ? styles.confirmButton : styles.confirmDisabled}
-                disabled={!canPay || processing}
-                onPress={confirmPayment}
-              >
-                <Text style={canPay ? styles.confirmText : styles.confirmTextDisabled}>
-                  {processing ? 'Processing…' : 'Confirm'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </ScrollView>
-        </View>
-      </Modal>
-
       {/* Cancel subscription modal */}
       <Modal visible={showCancel} transparent animationType="fade">
         <View style={styles.overlay}>
           <View style={styles.modalCard}>
             <View style={{ padding: 24 }}>
               <Text style={styles.modalTitle}>Cancel Premium?</Text>
-              {/* Names the features the plan actually lists, rather than a
-                  copy that drifts when a Platform Manager edits the plan. */}
               <Text style={styles.modalSubtitle}>
                 You&apos;ll lose access to
                 {premiumFeatures.length
@@ -520,32 +423,6 @@ const styles = StyleSheet.create({
 
   modalSubtitle: { color: '#D4E6DF', fontSize: 12, marginTop: 4, lineHeight: 17 },
 
-  demoNotice: {
-    flexDirection: 'row',
-    gap: 8,
-    backgroundColor: '#1E1705',
-    borderWidth: 1,
-    borderColor: '#5C4A16',
-    borderRadius: 10,
-    padding: 12,
-    marginTop: 16,
-  },
-
-  demoText: { color: '#E0A33F', fontSize: 10, lineHeight: 15, flex: 1 },
-
-  fieldLabel: { color: '#D4E6DF', fontSize: 11, marginTop: 14, marginBottom: 6 },
-
-  input: {
-    backgroundColor: '#00100B',
-    borderRadius: 8,
-    padding: 12,
-    color: '#fff',
-    fontSize: 13,
-  },
-
-  row: { flexDirection: 'row', gap: 12 },
-  field: { flex: 1 },
-
   modalButtons: { flexDirection: 'row', gap: 12, marginTop: 22 },
 
   cancelButton: {
@@ -557,25 +434,6 @@ const styles = StyleSheet.create({
   },
 
   cancelText: { color: '#fff', fontSize: 13 },
-
-  confirmButton: {
-    flex: 1,
-    backgroundColor: '#4ECBA0',
-    borderRadius: 8,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-
-  confirmDisabled: {
-    flex: 1,
-    backgroundColor: '#123B2F',
-    borderRadius: 8,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-
-  confirmText: { color: '#00382B', fontSize: 13, fontWeight: '600' },
-  confirmTextDisabled: { color: '#3A5049', fontSize: 13, fontWeight: '600' },
 
   dangerButton: {
     flex: 1,

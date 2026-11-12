@@ -503,6 +503,26 @@ export const api = {
       headers: authHeaders(token),
     }),
 
+  /**
+   * Changes the signed-in user's name. Email and role are deliberately not
+   * editable — the backend rejects them, since the email identifies the
+   * account and is what password reset is sent to.
+   */
+  updateMe: (token: string, data: { first_name?: string; last_name?: string }) =>
+    request<ApiUser>('/me', {
+      method: 'PATCH',
+      headers: authHeaders(token),
+      body: JSON.stringify(data),
+    }),
+
+  /** Changing a password requires the current one, so a left-open phone can't. */
+  changePassword: (token: string, current_password: string, new_password: string) =>
+    request<void>('/me/password', {
+      method: 'POST',
+      headers: authHeaders(token),
+      body: JSON.stringify({ current_password, new_password }),
+    }),
+
   // -------------------------------------------------------------------------
   // Profile
   // -------------------------------------------------------------------------
@@ -827,6 +847,20 @@ export const api = {
 
   getSubscription: (token: string) =>
     request<SubscriptionResponse>('/subscription', {
+      headers: authHeaders(token),
+    }),
+
+  /**
+   * Starts a Stripe Checkout and returns the page to open.
+   *
+   * The session carries the user's id as `client_reference_id`, so the
+   * webhook can match the payment back to an account. Premium is granted by
+   * that webhook, never by the browser returning — the return URL proves
+   * nothing, since anyone can reach it without paying.
+   */
+  createCheckout: (token: string) =>
+    request<{ url: string }>('/subscription/checkout', {
+      method: 'POST',
       headers: authHeaders(token),
     }),
 

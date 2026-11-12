@@ -42,7 +42,6 @@ export default function Sleep() {
 
   /**
    * Selecting an older date needs history the default 7-day window doesn't
-   * cover, so widen the fetch to reach it (plus the week shown in the chart).
    */
   const selectDate = (selected) => {
     setDate(selected);
@@ -54,9 +53,7 @@ export default function Sleep() {
   const duration = todayLog ? splitHours(todayLog.hours) : null;
 
   /**
-   * The last 7 days ending today, oldest first — fixed, so picking an older
-   * date to fill in a missed night moves the card above without sliding the
-   * chart off the current week.
+   * The last 7 days ending today, oldest first — fixed
    */
   const week = useMemo(
     () =>
@@ -130,8 +127,6 @@ export default function Sleep() {
             <TouchableOpacity
               style={styles.addButton}
               onPress={() =>
-                // Carry the viewed date across, so adding from an older day
-                // fills in that night rather than today.
                 router.push({
                   pathname: '/log/sleep/addsleep',
                   params: { date: toLogDate(date) },
@@ -177,8 +172,6 @@ export default function Sleep() {
 
           <View style={styles.chartArea}>
             {[10, 8, 6, 4, 2, 0].map((tick) => (
-              // +35 clears the weekday and date beneath each bar, so the
-              // gridlines line up with the bar bases rather than the labels.
               <View key={tick} style={[styles.gridRow, { bottom: (tick / MAX_HOURS) * 140 + 35 }]}>
                 <Text style={styles.gridLabel}>{tick}</Text>
                 <View style={styles.gridLine} />
