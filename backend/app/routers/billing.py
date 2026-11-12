@@ -52,8 +52,12 @@ from .subscription import effective_plan, get_subscription, load_plan
 
 router = APIRouter(tags=["payments"])
 
-DEFAULT_SUCCESS_URL = "https://knowtrients.onrender.com/?payment=success"
-DEFAULT_CANCEL_URL = "https://knowtrients.onrender.com/?payment=cancelled"
+# Back into the app when checkout finishes. The path must be a real route —
+# the subscription screen is at /account/subscription — or the deep link lands
+# on the router's unmatched-route page. STRIPE_SUCCESS_URL and
+# STRIPE_CANCEL_URL override these if the app is ever opened somewhere else.
+DEFAULT_SUCCESS_URL = "knowtrients://account/subscription"
+DEFAULT_CANCEL_URL = "knowtrients://account/subscription?cancelled=1"
 
 # Billing period in days -> Stripe's recurring interval.
 _INTERVALS = {1: ("day", 1), 7: ("week", 1), 30: ("month", 1), 365: ("year", 1)}

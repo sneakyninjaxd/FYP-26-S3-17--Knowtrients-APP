@@ -47,7 +47,15 @@ const formatPrice = (plan) => {
  * Where Stripe sends the browser back to. Matches the `scheme` in app.json,
  * so the hosted page hands control to the app rather than a web page.
  */
-const RETURN_URL = 'knowtrients://subscription';
+/**
+ * Where Stripe sends the browser when checkout finishes, and what
+ * openAuthSessionAsync watches for to know the sheet can close.
+ *
+ * The path has to be a real route — this screen is at /account/subscription,
+ * not /subscription — or the deep link lands on Expo Router's unmatched-route
+ * page. It must also match STRIPE_SUCCESS_URL on the server.
+ */
+const RETURN_URL = 'knowtrients://account/subscription';
 
 /** "3 November 2026" — for the renewal line. */
 const formatDate = (iso) => {
@@ -217,7 +225,7 @@ export default function Subscription() {
                   <Text key={f} style={styles.feature}>• {f}</Text>
                 ))}
 
-                {/* What the db actually says about this subscription. */}
+                {/* What the server actually says about this subscription. */}
                 {isCurrent && plan.plan_key === 'premium' && (
                   <Text style={styles.periodNote}>
                     {cancelledOn
@@ -258,6 +266,8 @@ export default function Subscription() {
           <View style={styles.modalCard}>
             <View style={{ padding: 24 }}>
               <Text style={styles.modalTitle}>Cancel Premium?</Text>
+              {/* Names the features the plan actually lists, rather than a
+                  copy that drifts when a Platform Manager edits the plan. */}
               <Text style={styles.modalSubtitle}>
                 You&apos;ll lose access to
                 {premiumFeatures.length
