@@ -30,8 +30,9 @@ Configuration (Render → Environment):
 
     STRIPE_SECRET_KEY      sk_test_... while testing, sk_live_... for real
     STRIPE_WEBHOOK_SECRET  whsec_..., from the webhook endpoint in Stripe
-    STRIPE_SUCCESS_URL     where Stripe sends the user after paying (optional)
-    STRIPE_CANCEL_URL      where Stripe sends them if they back out (optional)
+
+Where Stripe sends the user afterwards is fixed in this file rather than
+configured, because it has to match the app's own return URL.
 
 The amount charged is the premium plan's price from the database — the one
 the Platform Administrator sets on the Subscription Plans page — so what the
@@ -52,12 +53,17 @@ from .subscription import effective_plan, get_subscription, load_plan
 
 router = APIRouter(tags=["payments"])
 
-# Back into the app when checkout finishes. The path must be a real route —
-# the subscription screen is at /account/subscription — or the deep link lands
-# on the router's unmatched-route page. STRIPE_SUCCESS_URL and
-# STRIPE_CANCEL_URL override these if the app is ever opened somewhere else.
-DEFAULT_SUCCESS_URL = "knowtrients://account/subscription"
-DEFAULT_CANCEL_URL = "knowtrients://account/subscription?cancelled=1"
+# Back into the app when checkout finishes.
+#
+# The path has to be a real route — the subscription screen is at
+# /account/subscription, not /subscription — or the deep link lands on the
+# router's unmatched-route page.
+#
+# Fixed here rather than read from the environment: these have to match the
+# return URL compiled into the app, so a variable set to anything else can
+# only break the redirect.
+SUCCESS_URL = "knowtrients://account/subscription"
+CANCEL_URL = "knowtrients://account/subscription?cancelled=1"
 
 # Billing period in days -> Stripe's recurring interval.
 _INTERVALS = {1: ("day", 1), 7: ("week", 1), 30: ("month", 1), 365: ("year", 1)}
@@ -131,8 +137,8 @@ def create_checkout(
         client_reference_id=str(current_user.id),
         metadata={"user_id": str(current_user.id)},
         subscription_data={"metadata": {"user_id": str(current_user.id)}},
-        success_url=os.getenv("STRIPE_SUCCESS_URL", DEFAULT_SUCCESS_URL),
-        cancel_url=os.getenv("STRIPE_CANCEL_URL", DEFAULT_CANCEL_URL),
+        success_url=SUCCESS_URL,
+        cancel_url=CANCEL_URL,
     )
     # A returning subscriber reuses their Stripe customer; a new one is
     # created from their email.
