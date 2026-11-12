@@ -105,6 +105,24 @@ export function FoodProvider({ children }) {
     [token]
   );
 
+  /**
+   * Every nutrition field is validated server-side as >= 0, and the whole
+   * request is rejected if one isn't. Values copied off an existing log can
+   * fail that: a nullable column comes back as null, and rescaling a portion
+   * can leave a rounding artefact just below zero.
+   *
+   * Clamping here rather than at each call site means re-logging a past meal
+   * can't fail on a field the screen never shows.
+   */
+  const cleanNutrition = (nutrition = {}) => {
+    const safe = {};
+    for (const [key, value] of Object.entries(nutrition)) {
+      const n = Number(value);
+      safe[key] = Number.isFinite(n) && n > 0 ? n : 0;
+    }
+    return safe;
+  };
+
   /** Quick-add: no catalogue entry, so nutrition is supplied by the caller. */
   const addCustomEntry = useCallback(
     async ({ meal, name, quantity = 1, unit = 'serving', nutrition = {} }) => {
@@ -115,16 +133,15 @@ export function FoodProvider({ children }) {
           meal_type: toMealType(meal),
           log_date: activeDate,
           food_name: name,
-          quantity,
+          quantity: Math.max(Number(quantity) || 1, 0.01),
           unit,
-          ...nutrition,
+          ...cleanNutrition(nutrition),
         });
         setEntries((prev) => [...prev, created]);
         loadSummary(activeDate);
         return created;
       } catch (err) {
         console.warn('Could not add custom food log', err);
-        alert(`CUSTOM ADD FAILED ${err.status}: ${err.message}`);
         return null;
       }
     },
@@ -139,7 +156,6 @@ export function FoodProvider({ children }) {
    */
   const addEntry = async ({ meal, food, custom, quantity = 1, unit = 'serving', grams }) => {
     if (!token) return null;
-      console.log('addEntry meal =', meal, 'food =', food?.id, 'custom =', !!custom);
 
     if (custom) {
       return addCustomEntry({
@@ -168,7 +184,6 @@ export function FoodProvider({ children }) {
       return created;
     } catch (err) {
       console.warn('Could not add food log', err);
-      alert(`ADD FAILED ${err.status}: ${err.message}`);
       return null;
     }
   };
@@ -245,7 +260,9 @@ export function FoodProvider({ children }) {
           for (const key of NUTRIENT_KEYS) {
             const value = Number(entry[key]);
             if (Number.isFinite(value)) {
-              scaled[key] = Math.round(value * factor * 100) / 100;
+              // Never below zero: the server rejects the whole request if one
+              // nutrition field is negative.
+              scaled[key] = Math.max(Math.round(value * factor * 100) / 100, 0);
             }
           }
 
