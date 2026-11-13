@@ -2,7 +2,6 @@
   "expo": {
     "name": "Knowtrients",
     "slug": "Knowtrients",
-    "owner": "fyp2026",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -63,8 +62,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "26f3c59a-a047-4963-af3c-a0a6ae657e63"
+        "projectId": "e4cba0bb-4396-4a98-80bc-92bb31b625f1"
       }
-    }
+    },
+    "owner": "sneakninjaxds-team"
   }
 }
